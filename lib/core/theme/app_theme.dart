@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 class AppTheme {
   // Color Palette
@@ -10,22 +9,34 @@ class AppTheme {
   static const Color secondaryLight = Color(0xFF4DFFE0);
   static const Color accent = Color(0xFFFF6B6B);
   static const Color warning = Color(0xFFFFB347);
-  
+
   // Dark Theme Colors
   static const Color bgDark = Color(0xFF0A0E21);
   static const Color bgCard = Color(0xFF1A1F38);
   static const Color bgCardLight = Color(0xFF252A45);
   static const Color surfaceDark = Color(0xFF141829);
-  
+
   // Text Colors
   static const Color textPrimary = Color(0xFFFFFFFF);
   static const Color textSecondary = Color(0xFFB0B7CC);
   static const Color textMuted = Color(0xFF6B7280);
-  
+
   // Status Colors
   static const Color success = Color(0xFF4CAF50);
   static const Color danger = Color(0xFFFF4757);
   static const Color info = Color(0xFF2196F3);
+
+  static const TextTheme _textTheme = TextTheme(
+    displayLarge: TextStyle(color: textPrimary, fontWeight: FontWeight.bold),
+    displayMedium: TextStyle(color: textPrimary, fontWeight: FontWeight.bold),
+    headlineLarge: TextStyle(color: textPrimary, fontWeight: FontWeight.bold),
+    headlineMedium: TextStyle(color: textPrimary, fontWeight: FontWeight.w600),
+    titleLarge: TextStyle(color: textPrimary, fontWeight: FontWeight.w600),
+    titleMedium: TextStyle(color: textPrimary, fontWeight: FontWeight.w500),
+    bodyLarge: TextStyle(color: textSecondary),
+    bodyMedium: TextStyle(color: textSecondary),
+    labelLarge: TextStyle(color: textPrimary, fontWeight: FontWeight.w600),
+  );
 
   static ThemeData get darkTheme {
     return ThemeData(
@@ -38,29 +49,17 @@ class AppTheme {
         surface: bgCard,
         error: danger,
       ),
-      textTheme: GoogleFonts.outfitTextTheme(
-        const TextTheme(
-          displayLarge: TextStyle(color: textPrimary, fontWeight: FontWeight.bold),
-          displayMedium: TextStyle(color: textPrimary, fontWeight: FontWeight.bold),
-          headlineLarge: TextStyle(color: textPrimary, fontWeight: FontWeight.bold),
-          headlineMedium: TextStyle(color: textPrimary, fontWeight: FontWeight.w600),
-          titleLarge: TextStyle(color: textPrimary, fontWeight: FontWeight.w600),
-          titleMedium: TextStyle(color: textPrimary, fontWeight: FontWeight.w500),
-          bodyLarge: TextStyle(color: textSecondary),
-          bodyMedium: TextStyle(color: textSecondary),
-          labelLarge: TextStyle(color: textPrimary, fontWeight: FontWeight.w600),
-        ),
-      ),
-      appBarTheme: AppBarTheme(
+      textTheme: _textTheme,
+      appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
-        titleTextStyle: GoogleFonts.outfit(
+        titleTextStyle: TextStyle(
           color: textPrimary,
           fontSize: 20,
           fontWeight: FontWeight.w600,
         ),
-        iconTheme: const IconThemeData(color: textPrimary),
+        iconTheme: IconThemeData(color: textPrimary),
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
@@ -96,7 +95,7 @@ class AppTheme {
             borderRadius: BorderRadius.circular(16),
           ),
           elevation: 0,
-          textStyle: GoogleFonts.outfit(
+          textStyle: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w600,
           ),

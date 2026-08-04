@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -8,16 +9,21 @@ import 'core/providers/student_provider.dart';
 import 'features/auth/screens/splash_screen.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-import 'core/services/notification_service.dart';
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: ".env");
 
-  await NotificationService().init();
+  // .env có thể thiếu trên một số bản build — không được chặn app
+  try {
+    await dotenv.load(fileName: '.env', isOptional: true);
+  } catch (e) {
+    if (kDebugMode) print('dotenv load skipped: $e');
+  }
 
-  // Chỉ set overlay style (status bar trong suốt) — không dùng edgeToEdge
-  // vì gây vòng lặp WindowInsets trên emulator Android
+  FlutterError.onError = (details) {
+    FlutterError.presentError(details);
+    if (kDebugMode) print(details);
+  };
+
   SystemChrome.setSystemUIOverlayStyle(
     const SystemUiOverlayStyle(
       statusBarColor: Colors.transparent,
@@ -25,7 +31,7 @@ void main() async {
     ),
   );
 
-  SystemChrome.setPreferredOrientations([
+  await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,
     DeviceOrientation.portraitDown,
   ]);
@@ -49,6 +55,27 @@ class MyApp extends StatelessWidget {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.darkTheme,
         home: const SplashScreen(),
+        builder: (context, child) {
+          // Tránh màn trắng khi widget lỗi (release không hiện red screen)
+          ErrorWidget.builder = (details) {
+            return Material(
+              color: AppTheme.bgDark,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    kDebugMode
+                        ? details.exceptionAsString()
+                        : 'Đã xảy ra lỗi. Vui lòng mở lại ứng dụng.',
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: AppTheme.textPrimary),
+                  ),
+                ),
+              ),
+            );
+          };
+          return child ?? const SizedBox.shrink();
+        },
       ),
     );
   }

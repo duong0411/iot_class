@@ -61,7 +61,7 @@ jobs:
           zip -qq -r -9 AloT-unsigned.ipa Payload
 
       - name: Upload IPA artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: alot-ios-ipa
           path: build/ios/ipa/AloT-unsigned.ipa
