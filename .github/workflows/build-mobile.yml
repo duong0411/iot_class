@@ -67,12 +67,6 @@ jobs:
             echo "GOOGLE_WEB_CLIENT_ID=placeholder.apps.googleusercontent.com" > .env
           fi
 
-      - name: Ensure Firebase iOS config
-        run: |
-          if [ ! -f ios/Runner/GoogleService-Info.plist ] && [ -f app/GoogleService-Info.plist ]; then
-            cp app/GoogleService-Info.plist ios/Runner/GoogleService-Info.plist
-          fi
-
       - run: flutter pub get
       - run: flutter build ios --release --no-codesign
 

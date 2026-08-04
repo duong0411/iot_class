@@ -81,11 +81,17 @@ class AuthService {
     if (response.statusCode != 200) throw Exception(data['message'] ?? 'Thông tin không hợp lệ');
   }
 
-  Future<void> register(String name, String email, String phone, String password, String idToken) async {
+  Future<void> register(String name, String email, String phone, String password, String otp) async {
     final response = await http.post(
       Uri.parse('$baseUrl/auth/register'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'name': name, 'email': email, 'phone': phone, 'password': password, 'firebaseIdToken': idToken}),
+      body: jsonEncode({
+        'name': name,
+        'email': email,
+        'phone': phone,
+        'password': password,
+        'otp': otp,
+      }),
     ).timeout(const Duration(seconds: 10));
     final data = jsonDecode(response.body);
     if (response.statusCode != 201) throw Exception(data['message'] ?? 'Đăng ký thất bại');
@@ -102,11 +108,15 @@ class AuthService {
     if (response.statusCode != 200) throw Exception(data['message'] ?? 'Số điện thoại không tồn tại');
   }
 
-  Future<void> resetPassword(String phone, String idToken, String newPassword) async {
+  Future<void> resetPassword(String phone, String otp, String newPassword) async {
     final response = await http.post(
       Uri.parse('$baseUrl/auth/reset-password'),
       headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'phone': phone, 'firebaseIdToken': idToken, 'newPassword': newPassword}),
+      body: jsonEncode({
+        'phone': phone,
+        'otp': otp,
+        'newPassword': newPassword,
+      }),
     ).timeout(const Duration(seconds: 10));
     final data = jsonDecode(response.body);
     if (response.statusCode != 200) throw Exception(data['message'] ?? 'Đặt lại mật khẩu thất bại');

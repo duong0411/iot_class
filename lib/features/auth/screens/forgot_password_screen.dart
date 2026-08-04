@@ -49,14 +49,14 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       setState(() => _isOtpStep = true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Mã OTP đã được gửi đến số điện thoại của bạn'),
+          content: const Text('Nhập mật khẩu mới để đặt lại'),
           backgroundColor: AppTheme.success,
           behavior: SnackBarBehavior.floating,
           margin: EdgeInsets.only(bottom: R.bottom(context) + 16, left: 16, right: 16),
         ),
       );
     } else {
-      _showError(authProvider.errorMessage ?? 'Gửi OTP thất bại');
+      _showError(authProvider.errorMessage ?? 'Không tìm thấy số điện thoại');
     }
   }
 
@@ -66,7 +66,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     final authProvider = context.read<AuthProvider>();
     final ok = await authProvider.resetPassword(
       _phoneController.text.trim(),
-      _otpController.text.trim(),
+      '',
       _newPasswordController.text,
     );
 
@@ -193,8 +193,8 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 builder: (_, auth, __) => GradientButton(
                   onPressed: auth.status == AuthStatus.loading ? null : _handleRequestOtp,
                   isLoading: auth.status == AuthStatus.loading,
-                  text: 'Nhận mã OTP',
-                  icon: Icons.send_rounded,
+                  text: 'Tiếp tục',
+                  icon: Icons.arrow_forward_rounded,
                   gradient: const LinearGradient(colors: [AppTheme.warning, Color(0xFFFF8C00)]),
                 ),
               ).animate(delay: 400.ms).fadeIn().slideY(begin: 0.3),
@@ -221,7 +221,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ).animate().fadeIn().slideY(begin: 0.2),
         SizedBox(height: R.sp(context, 8)),
         Text(
-          'Vui lòng nhập mã OTP đã được gửi đến số ${_phoneController.text}',
+          'Nhập mật khẩu mới cho số ${_phoneController.text}',
           style: TextStyle(color: AppTheme.textSecondary, fontSize: R.fs(context, 14), height: 1.5),
         ).animate(delay: 100.ms).fadeIn(),
         SizedBox(height: R.sp(context, 36)),
@@ -230,20 +230,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           key: _resetFormKey,
           child: Column(
             children: [
-              CustomTextField(
-                controller: _otpController,
-                label: 'Mã OTP (6 số)',
-                hint: 'Ví dụ: 123456',
-                prefixIcon: Icons.message_rounded,
-                keyboardType: TextInputType.number,
-                validator: (v) {
-                  if (v == null || v.isEmpty) return 'Vui lòng nhập mã OTP';
-                  if (v.length != 6) return 'Mã OTP phải có 6 chữ số';
-                  return null;
-                },
-              ).animate(delay: 200.ms).fadeIn().slideX(begin: -0.2),
-              SizedBox(height: R.sp(context, 16)),
-
               CustomTextField(
                 controller: _newPasswordController,
                 label: 'Mật khẩu mới',

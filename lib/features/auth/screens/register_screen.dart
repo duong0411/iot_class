@@ -44,7 +44,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     if (!_formKey.currentState!.validate()) return;
 
     final authProvider = context.read<AuthProvider>();
-    final success = await authProvider.requestRegisterOtp(
+    final canRegister = await authProvider.requestRegisterOtp(
       _nameController.text.trim(),
       _emailController.text.trim(),
       _phoneController.text.trim(),
@@ -53,20 +53,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
     if (!mounted) return;
 
+    if (!canRegister) {
+      _showError(authProvider.errorMessage ?? 'Đăng ký thất bại');
+      return;
+    }
+
+    final success = await authProvider.register(
+      _nameController.text.trim(),
+      _emailController.text.trim(),
+      _phoneController.text.trim(),
+      _passwordController.text,
+      '',
+    );
+
+    if (!mounted) return;
+
     if (success) {
-      setState(() {
-        _isOtpStep = true;
-      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Mã OTP đã được gửi đến số điện thoại của bạn'),
+          content: const Text('Đăng ký thành công! Vui lòng đăng nhập.'),
           backgroundColor: AppTheme.success,
           behavior: SnackBarBehavior.floating,
           margin: EdgeInsets.only(bottom: R.bottom(context) + 16, left: 16, right: 16),
         ),
       );
+      Navigator.of(context).pop();
     } else {
-      _showError(authProvider.errorMessage ?? 'Yêu cầu OTP thất bại');
+      _showError(authProvider.errorMessage ?? 'Đăng ký thất bại');
     }
   }
 
@@ -256,8 +269,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 builder: (_, auth, __) => GradientButton(
                   onPressed: auth.status == AuthStatus.loading ? null : _handleRequestOtp,
                   isLoading: auth.status == AuthStatus.loading,
-                  text: 'Tiếp tục',
-                  icon: Icons.arrow_forward_rounded,
+                  text: 'Đăng ký',
+                  icon: Icons.person_add_rounded,
                   gradient: const LinearGradient(colors: [AppTheme.secondary, AppTheme.primary]),
                 ),
               ).animate(delay: 700.ms).fadeIn().slideY(begin: 0.3),

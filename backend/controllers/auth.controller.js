@@ -43,29 +43,32 @@ exports.register = async (req, res) => {
   try {
     const { name, email, phone, password, firebaseIdToken } = req.body;
 
-    if (!name || !email || !phone || !password || !firebaseIdToken) {
+    if (!name || !email || !phone || !password) {
       return res.status(400).json({ success: false, message: 'Vui lòng cung cấp đầy đủ thông tin' });
     }
 
-    if (!isFirebaseInitialized) {
-      return res.status(500).json({ success: false, message: 'Tính năng OTP chưa được cấu hình trên Server. Vui lòng thêm serviceAccountKey.json' });
-    }
+    // Optional Firebase phone OTP (legacy). Without token, register directly.
+    if (firebaseIdToken) {
+      if (!isFirebaseInitialized) {
+        return res.status(500).json({ success: false, message: 'Tính năng OTP chưa được cấu hình trên Server. Vui lòng thêm serviceAccountKey.json' });
+      }
 
-    let decodedToken;
-    try {
-      decodedToken = await getAuth().verifyIdToken(firebaseIdToken);
-    } catch (e) {
-      return res.status(400).json({ success: false, message: 'Xác thực mã OTP thất bại' });
-    }
+      let decodedToken;
+      try {
+        decodedToken = await getAuth().verifyIdToken(firebaseIdToken);
+      } catch (e) {
+        return res.status(400).json({ success: false, message: 'Xác thực mã OTP thất bại' });
+      }
 
-    const firebasePhone = decodedToken.phone_number;
-    let normalizedInputPhone = phone.trim();
-    if (normalizedInputPhone.startsWith('0')) {
-      normalizedInputPhone = '+84' + normalizedInputPhone.substring(1);
-    }
+      const firebasePhone = decodedToken.phone_number;
+      let normalizedInputPhone = phone.trim();
+      if (normalizedInputPhone.startsWith('0')) {
+        normalizedInputPhone = '+84' + normalizedInputPhone.substring(1);
+      }
 
-    if (firebasePhone !== normalizedInputPhone) {
-      return res.status(400).json({ success: false, message: 'Số điện thoại xác thực không khớp với đăng ký' });
+      if (firebasePhone !== normalizedInputPhone) {
+        return res.status(400).json({ success: false, message: 'Số điện thoại xác thực không khớp với đăng ký' });
+      }
     }
 
     const existingUser = await User.findOne({ $or: [{ email: email.toLowerCase().trim() }, { phone: phone.trim() }] });
@@ -258,7 +261,7 @@ exports.resetPassword = async (req, res) => {
   try {
     const { phone, firebaseIdToken, newPassword } = req.body;
 
-    if (!phone || !firebaseIdToken || !newPassword) {
+    if (!phone || !newPassword) {
       return res.status(400).json({ success: false, message: 'Vui lòng cung cấp đầy đủ thông tin' });
     }
 
@@ -266,25 +269,28 @@ exports.resetPassword = async (req, res) => {
       return res.status(400).json({ success: false, message: 'Mật khẩu mới ít nhất 6 ký tự' });
     }
 
-    if (!isFirebaseInitialized) {
-      return res.status(500).json({ success: false, message: 'Tính năng OTP chưa được cấu hình trên Server' });
-    }
+    // Optional Firebase phone OTP (legacy)
+    if (firebaseIdToken) {
+      if (!isFirebaseInitialized) {
+        return res.status(500).json({ success: false, message: 'Tính năng OTP chưa được cấu hình trên Server' });
+      }
 
-    let decodedToken;
-    try {
-      decodedToken = await getAuth().verifyIdToken(firebaseIdToken);
-    } catch (e) {
-      return res.status(400).json({ success: false, message: 'Xác thực OTP thất bại' });
-    }
+      let decodedToken;
+      try {
+        decodedToken = await getAuth().verifyIdToken(firebaseIdToken);
+      } catch (e) {
+        return res.status(400).json({ success: false, message: 'Xác thực OTP thất bại' });
+      }
 
-    const firebasePhone = decodedToken.phone_number;
-    let normalizedInputPhone = phone.trim();
-    if (normalizedInputPhone.startsWith('0')) {
-      normalizedInputPhone = '+84' + normalizedInputPhone.substring(1);
-    }
+      const firebasePhone = decodedToken.phone_number;
+      let normalizedInputPhone = phone.trim();
+      if (normalizedInputPhone.startsWith('0')) {
+        normalizedInputPhone = '+84' + normalizedInputPhone.substring(1);
+      }
 
-    if (firebasePhone !== normalizedInputPhone) {
-      return res.status(400).json({ success: false, message: 'Số điện thoại xác thực không khớp' });
+      if (firebasePhone !== normalizedInputPhone) {
+        return res.status(400).json({ success: false, message: 'Số điện thoại xác thực không khớp' });
+      }
     }
 
     const user = await User.findOne({
