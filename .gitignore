@@ -1,0 +1,85 @@
+# Flutter / Dart
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+**/doc/api/
+**/ios/Flutter/.last_build_id
+.flutter-plugins-dependencies
+
+# Large / local datasets (do not push)
+data_crawl/
+data_crawl.zip
+*.zip
+
+# Env & secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+*.iml
+.idea/
+.vscode/
+*.swp
+
+# Android
+**/android/**/gradle-wrapper.jar
+.gradle/
+**/android/local.properties
+**/android/**/GeneratedPluginRegistrant.java
+**/android/key.properties
+*.jks
+*.keystore
+
+# iOS / macOS
+**/ios/**/*.mode1v3
+**/ios/**/*.mode2v3
+**/ios/**/*.moved-aside
+**/ios/**/*.pbxuser
+**/ios/**/*.perspectivev3
+**/ios/**/*sync/
+**/ios/**/.sconsign.dblite
+**/ios/**/.tags*
+**/ios/**/.vagrant/
+**/ios/**/DerivedData/
+**/ios/**/Icon?
+**/ios/**/Pods/
+**/ios/**/.symlinks/
+**/ios/**/profile
+**/ios/**/xcuserdata
+**/ios/.generated/
+**/ios/Flutter/.last_build_id
+**/ios/Flutter/App.framework
+**/ios/Flutter/Flutter.framework
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/Generated.xcconfig
+**/ios/Flutter/ephemeral
+**/ios/ServiceDefinitions.json
+**/macos/Flutter/ephemeral
+**/linux/flutter/ephemeral
+**/windows/flutter/ephemeral
+
+# Misc
+.DS_Store
+**/coverage/
+*.log
+*.pyc
+__pycache__/
+
+# ESP-IDF / firmware build trees (if nested)
+**/build/
+**/sdkconfig.old
+
+# Node backend
+backend/node_modules/
+backend/.env
+
+# Secrets / local
+backend/serviceAccountKey.json
+**/serviceAccountKey.json
+local.properties
+

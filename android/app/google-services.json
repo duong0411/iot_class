@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "681573194119",
+    "project_id": "phone-5c466",
+    "storage_bucket": "phone-5c466.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:681573194119:android:0f15d1f9e0b46d81dd9b22",
+        "android_client_info": {
+          "package_name": "com.duongphung.alot"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCgutgXxAsxMR32AnH48hnnjjynQxHcHLc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,84 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-ios:
+    name: iOS IPA (unsigned)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Prepare .env
+        run: |
+          if [ -n "${{ secrets.ENV_FILE }}" ]; then
+            printf '%s\n' "${{ secrets.ENV_FILE }}" > .env
+          elif [ ! -f .env ]; then
+            echo "GOOGLE_WEB_CLIENT_ID=placeholder.apps.googleusercontent.com" > .env
+          fi
+
+      - name: Ensure Firebase iOS config
+        run: |
+          if [ ! -f ios/Runner/GoogleService-Info.plist ] && [ -f app/GoogleService-Info.plist ]; then
+            cp app/GoogleService-Info.plist ios/Runner/GoogleService-Info.plist
+            echo "Copied GoogleService-Info.plist into ios/Runner"
+          fi
+
+      - name: Flutter pub get
+        run: flutter pub get
+
+      # Project dùng Swift Package Manager — không có Podfile
+      - name: Build iOS release (no codesign)
+        run: flutter build ios --release --no-codesign
+
+      - name: Package unsigned IPA
+        run: |
+          set -euo pipefail
+          APP_PATH="build/ios/iphoneos/Runner.app"
+          test -d "$APP_PATH"
+          mkdir -p build/ios/ipa/Payload
+          cp -R "$APP_PATH" build/ios/ipa/Payload/
+          cd build/ios/ipa
+          zip -qq -r -9 AloT-unsigned.ipa Payload
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: alot-ios-ipa
+          path: build/ios/ipa/AloT-unsigned.ipa
+          if-no-files-found: error
+
+      - name: Publish GitHub Release (manual / tag)
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('ios-v{0}', github.run_number) }}
+          name: iOS IPA ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v1.0.{0}', github.run_number) }}
+          body: |
+            AloT iOS unsigned IPA (sideload / TestFlight cần ký riêng)
+            - Commit: ${{ github.sha }}
+            - Built by GitHub Actions (no codesign)
+          files: build/ios/ipa/AloT-unsigned.ipa
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -1,0 +1,117 @@
+name: Build Mobile (APK + IPA)
+
+# Chạy 1 lần để ra cả APK và IPA. Release khi tag v* hoặc bấm Run workflow.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-android:
+    name: Android APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Prepare .env
+        run: |
+          if [ -n "${{ secrets.ENV_FILE }}" ]; then
+            printf '%s\n' "${{ secrets.ENV_FILE }}" > .env
+          elif [ ! -f .env ]; then
+            echo "GOOGLE_WEB_CLIENT_ID=placeholder.apps.googleusercontent.com" > .env
+          fi
+
+      - run: flutter pub get
+      - run: flutter build apk --release
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: alot-android-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+
+  build-ios:
+    name: iOS IPA
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Prepare .env
+        run: |
+          if [ -n "${{ secrets.ENV_FILE }}" ]; then
+            printf '%s\n' "${{ secrets.ENV_FILE }}" > .env
+          elif [ ! -f .env ]; then
+            echo "GOOGLE_WEB_CLIENT_ID=placeholder.apps.googleusercontent.com" > .env
+          fi
+
+      - name: Ensure Firebase iOS config
+        run: |
+          if [ ! -f ios/Runner/GoogleService-Info.plist ] && [ -f app/GoogleService-Info.plist ]; then
+            cp app/GoogleService-Info.plist ios/Runner/GoogleService-Info.plist
+          fi
+
+      - run: flutter pub get
+      - run: flutter build ios --release --no-codesign
+
+      - name: Package IPA
+        run: |
+          set -euo pipefail
+          mkdir -p build/ios/ipa/Payload
+          cp -R build/ios/iphoneos/Runner.app build/ios/ipa/Payload/
+          cd build/ios/ipa
+          zip -qq -r -9 AloT-unsigned.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: alot-ios-ipa
+          path: build/ios/ipa/AloT-unsigned.ipa
+          if-no-files-found: error
+
+  release:
+    name: GitHub Release
+    needs: [build-android, build-ios]
+    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('mobile-v{0}', github.run_number) }}
+          name: AloT Mobile ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || format('v1.0.{0}', github.run_number) }}
+          body: |
+            APK + unsigned IPA
+            - Commit: ${{ github.sha }}
+          files: |
+            artifacts/alot-android-apk/app-release.apk
+            artifacts/alot-ios-ipa/AloT-unsigned.ipa
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
