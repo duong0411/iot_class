@@ -1,32 +1,58 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 
+/// Local-only auth — users stored on device via SharedPreferences.
 class AuthService {
-  static const String baseUrl = 'https://adam.podcast.io.vn/api';
+  static const _usersKey = 'local_users';
+  static const _sessionTokenKey = 'auth_token';
+  static const _sessionUserKey = 'user_data';
 
   String? _token;
   String? get token => _token;
 
-  // ─── Lấy SharedPreferences ──────────────────────────────────────────────────
-  Future<void> _saveUserData(String token, Map<String, dynamic> userJson) async {
+  Future<List<Map<String, dynamic>>> _loadUsers() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('auth_token', token);
-    await prefs.setString('user_data', jsonEncode(userJson));
+    final raw = prefs.getString(_usersKey);
+    if (raw == null || raw.isEmpty) return [];
+    final list = jsonDecode(raw) as List<dynamic>;
+    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+  }
+
+  Future<void> _saveUsers(List<Map<String, dynamic>> users) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_usersKey, jsonEncode(users));
+  }
+
+  Future<void> _saveSession(String token, Map<String, dynamic> userJson) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_sessionTokenKey, token);
+    await prefs.setString(_sessionUserKey, jsonEncode(userJson));
+    _token = token;
+  }
+
+  Map<String, dynamic> _publicUser(Map<String, dynamic> stored) {
+    return {
+      'id': stored['id'],
+      'name': stored['name'],
+      'email': stored['email'],
+      'phone': stored['phone'] ?? '',
+      'avatar': stored['avatar'],
+      'createdAt': stored['createdAt'],
+    };
   }
 
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove('auth_token');
-    await prefs.remove('user_data');
+    await prefs.remove(_sessionTokenKey);
+    await prefs.remove(_sessionUserKey);
     _token = null;
   }
 
   Future<UserModel?> loadSavedUser() async {
     final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('auth_token');
-    final userData = prefs.getString('user_data');
+    final token = prefs.getString(_sessionTokenKey);
+    final userData = prefs.getString(_sessionUserKey);
     if (token != null && userData != null) {
       _token = token;
       return UserModel.fromJson(jsonDecode(userData));
@@ -34,91 +60,78 @@ class AuthService {
     return null;
   }
 
-  // ─── Login ────────────────────────────────────────────────────────────────
   Future<UserModel?> login(String email, String password) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/auth/login'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'email': email, 'password': password}),
-    ).timeout(const Duration(seconds: 10));
+    final users = await _loadUsers();
+    final emailNorm = email.trim().toLowerCase();
 
-    final data = jsonDecode(response.body);
-    if (response.statusCode == 200 && data['success'] == true) {
-      _token = data['data']['token'];
-      final user = UserModel.fromJson(data['data']['user']);
-      await _saveUserData(_token!, data['data']['user']);
-      return user;
+    Map<String, dynamic>? match;
+    for (final u in users) {
+      if ((u['email'] as String).toLowerCase() == emailNorm &&
+          u['password'] == password) {
+        match = u;
+        break;
+      }
     }
-    return null;
+
+    if (match == null) return null;
+
+    final public = _publicUser(match);
+    final token = 'local_${match['id']}';
+    await _saveSession(token, public);
+    return UserModel.fromJson(public);
   }
 
-  // ─── Google Login ─────────────────────────────────────────────────────────
-  Future<UserModel?> googleLogin(String idToken) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/auth/google-login'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'idToken': idToken}),
-    ).timeout(const Duration(seconds: 10));
+  Future<void> register({
+    required String name,
+    required String email,
+    required String phone,
+    required String password,
+  }) async {
+    final users = await _loadUsers();
+    final emailNorm = email.trim().toLowerCase();
+    final phoneNorm = phone.trim();
 
-    final data = jsonDecode(response.body);
-    if (response.statusCode == 200 && data['success'] == true) {
-      _token = data['data']['token'];
-      final user = UserModel.fromJson(data['data']['user']);
-      await _saveUserData(_token!, data['data']['user']);
-      return user;
+    if (users.any((u) => (u['email'] as String).toLowerCase() == emailNorm)) {
+      throw Exception('Email đã được sử dụng');
     }
-    throw Exception(data['message'] ?? 'Đăng nhập Google thất bại');
+    if (users.any((u) => (u['phone'] as String) == phoneNorm)) {
+      throw Exception('Số điện thoại đã được sử dụng');
+    }
+
+    final now = DateTime.now();
+    final user = {
+      'id': now.millisecondsSinceEpoch.toString(),
+      'name': name.trim(),
+      'email': emailNorm,
+      'phone': phoneNorm,
+      'password': password,
+      'avatar': null,
+      'createdAt': now.toIso8601String(),
+    };
+    users.add(user);
+    await _saveUsers(users);
   }
 
-  // ─── Register ─────────────────────────────────────────────────────────────
-  Future<void> requestRegisterOtp(String name, String email, String phone, String password) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/auth/check-pre-register'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'email': email, 'phone': phone}),
-    ).timeout(const Duration(seconds: 10));
-    final data = jsonDecode(response.body);
-    if (response.statusCode != 200) throw Exception(data['message'] ?? 'Thông tin không hợp lệ');
+  Future<void> checkPhoneExists(String phone) async {
+    final users = await _loadUsers();
+    final phoneNorm = phone.trim();
+    final exists = users.any((u) => (u['phone'] as String) == phoneNorm);
+    if (!exists) {
+      throw Exception('Số điện thoại không tồn tại');
+    }
   }
 
-  Future<void> register(String name, String email, String phone, String password, String otp) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/auth/register'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'name': name,
-        'email': email,
-        'phone': phone,
-        'password': password,
-        'otp': otp,
-      }),
-    ).timeout(const Duration(seconds: 10));
-    final data = jsonDecode(response.body);
-    if (response.statusCode != 201) throw Exception(data['message'] ?? 'Đăng ký thất bại');
-  }
-
-  // ─── Forgot Password ──────────────────────────────────────────────────────
-  Future<void> forgotPassword(String phone) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/auth/check-phone-exists'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({'phone': phone}),
-    ).timeout(const Duration(seconds: 10));
-    final data = jsonDecode(response.body);
-    if (response.statusCode != 200) throw Exception(data['message'] ?? 'Số điện thoại không tồn tại');
-  }
-
-  Future<void> resetPassword(String phone, String otp, String newPassword) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/auth/reset-password'),
-      headers: {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'phone': phone,
-        'otp': otp,
-        'newPassword': newPassword,
-      }),
-    ).timeout(const Duration(seconds: 10));
-    final data = jsonDecode(response.body);
-    if (response.statusCode != 200) throw Exception(data['message'] ?? 'Đặt lại mật khẩu thất bại');
+  Future<void> resetPassword({
+    required String phone,
+    required String newPassword,
+  }) async {
+    final users = await _loadUsers();
+    final phoneNorm = phone.trim();
+    final index = users.indexWhere((u) => (u['phone'] as String) == phoneNorm);
+    if (index < 0) {
+      throw Exception('Không tìm thấy tài khoản');
+    }
+    users[index]['password'] = newPassword;
+    await _saveUsers(users);
   }
 }

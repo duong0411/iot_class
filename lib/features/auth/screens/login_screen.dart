@@ -6,7 +6,6 @@ import '../../../core/providers/auth_provider.dart';
 import '../../../core/utils/responsive.dart';
 import '../widgets/gradient_button.dart';
 import '../widgets/custom_text_field.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'register_screen.dart';
 import 'forgot_password_screen.dart';
 import '../../home/screens/home_screen.dart';
@@ -73,8 +72,6 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-
-
   @override
   Widget build(BuildContext context) {
     final hp = R.hPad(context);
@@ -82,7 +79,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
     return Scaffold(
       backgroundColor: AppTheme.bgDark,
-      // resizeToAvoidBottomInset = true (default) → bàn phím đẩy nội dung lên
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -92,9 +88,8 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ),
         child: SafeArea(
-          bottom: true, // tránh gesture bar
+          bottom: true,
           child: SingleChildScrollView(
-            // padding ngang responsive + bottom = gesture bar
             padding: EdgeInsets.only(
               left: hp,
               right: hp,
@@ -104,8 +99,6 @@ class _LoginScreenState extends State<LoginScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 SizedBox(height: R.sp(context, 40)),
-
-                // Header
                 Center(
                   child: Column(
                     children: [
@@ -128,9 +121,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         child: Icon(Icons.school_rounded,
                             size: logoSize * 0.5, color: Colors.white),
                       ).animate().scale(duration: 600.ms, curve: Curves.elasticOut),
-
                       SizedBox(height: R.sp(context, 16)),
-
                       Text(
                         'Lớp Học Thông Minh',
                         textAlign: TextAlign.center,
@@ -141,13 +132,17 @@ class _LoginScreenState extends State<LoginScreen> {
                             ),
                       ).animate(delay: 200.ms).fadeIn().slideY(begin: 0.2),
                       SizedBox(height: R.sp(context, 8)),
+                      Text(
+                        'Đăng nhập trên thiết bị (local)',
+                        style: TextStyle(
+                          color: AppTheme.textSecondary,
+                          fontSize: R.fs(context, 13),
+                        ),
+                      ).animate(delay: 250.ms).fadeIn(),
                     ],
                   ),
                 ),
-
                 SizedBox(height: R.sp(context, 40)),
-
-                // Form
                 Form(
                   key: _formKey,
                   child: Column(
@@ -164,9 +159,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           return null;
                         },
                       ).animate(delay: 400.ms).fadeIn().slideX(begin: -0.2),
-
                       SizedBox(height: R.sp(context, 16)),
-
                       CustomTextField(
                         controller: _passwordController,
                         label: 'Mật khẩu',
@@ -189,9 +182,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           return null;
                         },
                       ).animate(delay: 500.ms).fadeIn().slideX(begin: 0.2),
-
                       SizedBox(height: R.sp(context, 8)),
-
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
@@ -209,9 +200,7 @@ class _LoginScreenState extends State<LoginScreen> {
                           ),
                         ),
                       ).animate(delay: 600.ms).fadeIn(),
-
                       SizedBox(height: R.sp(context, 16)),
-
                       Consumer<AuthProvider>(
                         builder: (_, auth, __) => GradientButton(
                           onPressed:
@@ -224,95 +213,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ],
                   ),
                 ),
-
-                SizedBox(height: R.sp(context, 20)),
-
-                // OR divider
-                Row(
-                  children: [
-                    Expanded(child: Divider(color: Color(0xFF2A3050))),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text('Hoặc', style: TextStyle(color: AppTheme.textSecondary)),
-                    ),
-                    Expanded(child: Divider(color: Color(0xFF2A3050))),
-                  ],
-                ).animate(delay: 800.ms).fadeIn(),
-
-                SizedBox(height: R.sp(context, 20)),
-
-                // Google Login Button
-                Consumer<AuthProvider>(
-                  builder: (_, auth, __) => SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: auth.status == AuthStatus.loading ? null : () async {
-                        final success = await auth.loginWithGoogle();
-                        if (!mounted) return;
-                        if (success) {
-                          Navigator.of(context).pushReplacement(
-                            PageRouteBuilder(
-                              pageBuilder: (_, __, ___) => const HomeScreen(),
-                              transitionDuration: const Duration(milliseconds: 600),
-                              transitionsBuilder: (_, animation, __, child) => SlideTransition(
-                                position: Tween<Offset>(
-                                  begin: const Offset(1.0, 0.0),
-                                  end: Offset.zero,
-                                ).animate(CurvedAnimation(parent: animation, curve: Curves.easeInOut)),
-                                child: child,
-                              ),
-                            ),
-                          );
-                        } else if (auth.errorMessage != null) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(auth.errorMessage!),
-                              backgroundColor: AppTheme.danger,
-                              behavior: SnackBarBehavior.floating,
-                              margin: EdgeInsets.only(
-                                bottom: R.bottom(context) + 16,
-                                left: 16,
-                                right: 16,
-                              ),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                          );
-                        }
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: Colors.black87,
-                        padding: EdgeInsets.symmetric(vertical: R.sp(context, 14)),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        elevation: 0,
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const FaIcon(
-                            FontAwesomeIcons.google,
-                            color: Color(0xFFDB4437),
-                            size: 20,
-                          ),
-                          const SizedBox(width: 12),
-                          const Text(
-                            'Tiếp tục với Google',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ).animate(delay: 850.ms).fadeIn().slideY(begin: 0.3),
-
-                SizedBox(height: R.sp(context, 20)),
-
-                // Register
+                SizedBox(height: R.sp(context, 28)),
                 Center(
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -340,8 +241,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ],
                   ),
-                ).animate(delay: 900.ms).fadeIn(),
-
+                ).animate(delay: 800.ms).fadeIn(),
                 SizedBox(height: R.sp(context, 20)),
               ],
             ),

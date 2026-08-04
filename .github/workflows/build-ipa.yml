@@ -28,14 +28,6 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Prepare .env
-        run: |
-          if [ -n "${{ secrets.ENV_FILE }}" ]; then
-            printf '%s\n' "${{ secrets.ENV_FILE }}" > .env
-          elif [ ! -f .env ]; then
-            echo "GOOGLE_WEB_CLIENT_ID=placeholder.apps.googleusercontent.com" > .env
-          fi
-
       - name: Flutter pub get
         run: |
           flutter clean

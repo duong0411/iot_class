@@ -66,7 +66,6 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     final authProvider = context.read<AuthProvider>();
     final ok = await authProvider.resetPassword(
       _phoneController.text.trim(),
-      '',
       _newPasswordController.text,
     );
 
@@ -167,7 +166,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
         ).animate(delay: 100.ms).fadeIn().slideY(begin: 0.2),
         SizedBox(height: R.sp(context, 8)),
         Text(
-          'Nhập số điện thoại đã đăng ký, chúng tôi sẽ gửi mã OTP để bạn đặt lại mật khẩu.',
+          'Nhập số điện thoại đã đăng ký trên máy này để đặt lại mật khẩu.',
           style: TextStyle(color: AppTheme.textSecondary, fontSize: R.fs(context, 14), height: 1.5),
         ).animate(delay: 200.ms).fadeIn(),
         SizedBox(height: R.sp(context, 36)),

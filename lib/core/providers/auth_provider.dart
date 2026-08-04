@@ -1,8 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../models/user_model.dart';
 import '../services/auth_service.dart';
-import 'package:google_sign_in/google_sign_in.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 enum AuthStatus { initial, loading, authenticated, unauthenticated, error }
 
@@ -31,7 +29,7 @@ class AuthProvider extends ChangeNotifier {
         return true;
       }
     } catch (e) {
-      if (kDebugMode) print("Lỗi load user: $e");
+      if (kDebugMode) print('Lỗi load user: $e');
     }
 
     _status = AuthStatus.unauthenticated;
@@ -58,117 +56,41 @@ class AuthProvider extends ChangeNotifier {
         _status = AuthStatus.authenticated;
         notifyListeners();
         return true;
-      } else {
-        _status = AuthStatus.unauthenticated;
-        _errorMessage = 'Tài khoản hoặc mật khẩu không đúng';
-        notifyListeners();
-        return false;
       }
+      _status = AuthStatus.unauthenticated;
+      _errorMessage = 'Tài khoản hoặc mật khẩu không đúng';
+      notifyListeners();
+      return false;
     } catch (e) {
       _status = AuthStatus.unauthenticated;
-      _errorMessage = 'Không thể kết nối server. Vui lòng kiểm tra lại đường truyền Internet!';
+      _errorMessage = 'Đăng nhập thất bại. Vui lòng thử lại!';
       notifyListeners();
       return false;
     }
   }
 
-  Future<bool> loginWithGoogle() async {
+  Future<bool> register(String name, String email, String phone, String password) async {
     _status = AuthStatus.loading;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      final GoogleSignIn googleSignIn = GoogleSignIn(
-        serverClientId: dotenv.env['GOOGLE_WEB_CLIENT_ID'],
+      await _authService.register(
+        name: name,
+        email: email,
+        phone: phone,
+        password: password,
       );
-
-      GoogleSignInAccount? googleUser;
-      try {
-        googleUser = await googleSignIn.signIn();
-      } catch (e) {
-        if (kDebugMode) print("Lỗi GoogleSignIn: $e");
-        _status = AuthStatus.unauthenticated;
-        _errorMessage = 'Đã hủy đăng nhập hoặc lỗi kết nối.';
-        notifyListeners();
-        return false;
-      }
-
-      if (googleUser == null) {
-        _status = AuthStatus.unauthenticated;
-        notifyListeners();
-        return false;
-      }
-
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
-      final String? idToken = googleAuth.idToken;
-
-      if (idToken == null) {
-        throw Exception('Không thể lấy ID Token từ Google');
-      }
-
-      final user = await _authService.googleLogin(idToken);
-      if (user != null) {
-        _user = user;
-        _status = AuthStatus.authenticated;
-        notifyListeners();
-        return true;
-      } else {
-        _status = AuthStatus.unauthenticated;
-        _errorMessage = 'Đăng nhập Google thất bại';
-        notifyListeners();
-        return false;
-      }
-    } catch (e) {
-      if (kDebugMode) print("Lỗi Google Sign In: $e");
-      _status = AuthStatus.unauthenticated;
-      _errorMessage = 'Đăng nhập Google thất bại. Vui lòng thử lại!';
-      notifyListeners();
-      return false;
-    }
-  }
-
-  Future<bool> requestRegisterOtp(String name, String email, String phone, String password) async {
-    _status = AuthStatus.loading;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      await _authService.requestRegisterOtp(name, email, phone, password);
       _status = AuthStatus.unauthenticated;
       notifyListeners();
       return true;
     } catch (e) {
-      if (kDebugMode) print("Lỗi: $e");
+      if (kDebugMode) print('Lỗi đăng ký: $e');
       _status = AuthStatus.unauthenticated;
       final errorStr = e.toString();
       _errorMessage = errorStr.startsWith('Exception: ')
           ? errorStr.replaceAll('Exception: ', '')
-          : 'Lỗi kết nối. Vui lòng kiểm tra mạng và thử lại!';
-      notifyListeners();
-      return false;
-    }
-  }
-
-  Future<bool> register(String name, String email, String phone, String password, String otp) async {
-    _status = AuthStatus.loading;
-    _errorMessage = null;
-    notifyListeners();
-
-    try {
-      await _authService.register(name, email, phone, password, otp);
-
-      _status = AuthStatus.unauthenticated;
-      notifyListeners();
-      return true;
-    } catch (e) {
-      if (kDebugMode) print("Lỗi: $e");
-      _status = AuthStatus.unauthenticated;
-      String errorStr = e.toString();
-      if (errorStr.startsWith('Exception: ')) {
-        _errorMessage = errorStr.replaceAll('Exception: ', '');
-      } else {
-        _errorMessage = 'Lỗi kết nối. Vui lòng kiểm tra mạng và thử lại!';
-      }
+          : 'Đăng ký thất bại. Vui lòng thử lại!';
       notifyListeners();
       return false;
     }
@@ -180,42 +102,37 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _authService.forgotPassword(phone);
+      await _authService.checkPhoneExists(phone);
       _status = AuthStatus.unauthenticated;
       notifyListeners();
       return true;
     } catch (e) {
-      if (kDebugMode) print("Lỗi: $e");
       _status = AuthStatus.unauthenticated;
       final errorStr = e.toString();
       _errorMessage = errorStr.startsWith('Exception: ')
           ? errorStr.replaceAll('Exception: ', '')
-          : 'Lỗi kết nối. Vui lòng kiểm tra mạng và thử lại!';
+          : 'Không tìm thấy số điện thoại';
       notifyListeners();
       return false;
     }
   }
 
-  Future<bool> resetPassword(String phone, String otp, String newPassword) async {
+  Future<bool> resetPassword(String phone, String newPassword) async {
     _status = AuthStatus.loading;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      await _authService.resetPassword(phone, otp, newPassword);
-
+      await _authService.resetPassword(phone: phone, newPassword: newPassword);
       _status = AuthStatus.unauthenticated;
       notifyListeners();
       return true;
     } catch (e) {
-      if (kDebugMode) print("Lỗi: $e");
       _status = AuthStatus.unauthenticated;
-      String errorStr = e.toString();
-      if (errorStr.startsWith('Exception: ')) {
-        _errorMessage = errorStr.replaceAll('Exception: ', '');
-      } else {
-        _errorMessage = 'Lỗi kết nối. Vui lòng kiểm tra mạng và thử lại!';
-      }
+      final errorStr = e.toString();
+      _errorMessage = errorStr.startsWith('Exception: ')
+          ? errorStr.replaceAll('Exception: ', '')
+          : 'Đặt lại mật khẩu thất bại';
       notifyListeners();
       return false;
     }

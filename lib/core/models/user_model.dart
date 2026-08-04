@@ -2,6 +2,7 @@ class UserModel {
   final String id;
   final String name;
   final String email;
+  final String phone;
   final String? avatar;
   final DateTime createdAt;
 
@@ -9,6 +10,7 @@ class UserModel {
     required this.id,
     required this.name,
     required this.email,
+    this.phone = '',
     this.avatar,
     required this.createdAt,
   });
@@ -18,6 +20,7 @@ class UserModel {
       id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
       name: json['name'] ?? '',
       email: json['email'] ?? '',
+      phone: json['phone']?.toString() ?? '',
       avatar: json['avatar'],
       createdAt: json['createdAt'] != null
           ? DateTime.parse(json['createdAt'].toString())
@@ -30,6 +33,7 @@ class UserModel {
       'id': id,
       'name': name,
       'email': email,
+      'phone': phone,
       'avatar': avatar,
       'createdAt': createdAt.toIso8601String(),
     };

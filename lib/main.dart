@@ -7,17 +7,9 @@ import 'core/providers/auth_provider.dart';
 import 'core/providers/device_provider.dart';
 import 'core/providers/student_provider.dart';
 import 'features/auth/screens/splash_screen.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // .env có thể thiếu trên một số bản build — không được chặn app
-  try {
-    await dotenv.load(fileName: '.env', isOptional: true);
-  } catch (e) {
-    if (kDebugMode) print('dotenv load skipped: $e');
-  }
 
   FlutterError.onError = (details) {
     FlutterError.presentError(details);
@@ -56,7 +48,6 @@ class MyApp extends StatelessWidget {
         theme: AppTheme.darkTheme,
         home: const SplashScreen(),
         builder: (context, child) {
-          // Tránh màn trắng khi widget lỗi (release không hiện red screen)
           ErrorWidget.builder = (details) {
             return Material(
               color: AppTheme.bgDark,
