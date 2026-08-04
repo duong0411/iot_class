@@ -155,7 +155,6 @@ class AuthProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      // OTP UI giữ lại cho flow cũ; không còn xác thực Firebase Phone Auth
       await _authService.register(name, email, phone, password, otp);
 
       _status = AuthStatus.unauthenticated;

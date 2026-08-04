@@ -37,7 +37,14 @@ jobs:
           fi
 
       - name: Flutter pub get
-        run: flutter pub get
+        run: |
+          flutter clean
+          flutter pub get
+          if grep -R -n -i "firebase_" pubspec.lock .flutter-plugins-dependencies 2>/dev/null; then
+            echo "Firebase plugins still present after pub get" >&2
+            exit 1
+          fi
+          echo "Firebase Flutter plugins: none"
 
       # Project dùng Swift Package Manager — không có Podfile
       - name: Build iOS release (no codesign)

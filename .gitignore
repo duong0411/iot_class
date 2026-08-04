@@ -83,3 +83,9 @@ backend/serviceAccountKey.json
 **/serviceAccountKey.json
 local.properties
 
+# Firebase client configs (Flutter Firebase removed)
+**/GoogleService-Info.plist
+**/google-services.json
+app/GoogleService-Info.plist
+android/app/google-services.json
+
