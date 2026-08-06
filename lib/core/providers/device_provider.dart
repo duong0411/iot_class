@@ -117,10 +117,10 @@ class DeviceProvider extends ChangeNotifier {
 
   void _startClassroomWatchdog() {
     _classroomWatchdogTimer?.cancel();
-    _classroomWatchdogTimer = Timer.periodic(const Duration(seconds: 3), (_) {
+    _classroomWatchdogTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       final shouldBeOnline = isMqttConnected &&
           lastClassroomDataTime != null &&
-          DateTime.now().difference(lastClassroomDataTime!).inSeconds <= 10;
+          DateTime.now().difference(lastClassroomDataTime!).inSeconds <= 7;
       if (isClassroomDeviceOnline != shouldBeOnline) {
         isClassroomDeviceOnline = shouldBeOnline;
         notifyListeners();

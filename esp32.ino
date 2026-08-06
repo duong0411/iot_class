@@ -101,12 +101,12 @@ int wifiCount = 0;
 #define DEV_MODE        "classroom_mode"
 
 // ─────────────────────────────────────────────────────────────
-//  INTERVAL THỜI GIAN
+//  INTERVAL THỜI GIAN (REALTIME)
 // ─────────────────────────────────────────────────────────────
-#define TELEMETRY_MS     3000   // Cập nhật telemetry & OLED mỗi 3s
-#define SENSOR_FAST_MS   300    // Đọc LDR & RFID nhanh
-#define HEARTBEAT_MS    30000
-#define RECONNECT_MS    10000
+#define TELEMETRY_MS     3000   // Cập nhật telemetry cảm biến & trạng thái mỗi 3s
+#define SENSOR_FAST_MS   300    // Đọc LDR & RFID siêu nhanh 300ms
+#define HEARTBEAT_MS     5000   // Báo online heartbeat mỗi 5s
+#define RECONNECT_MS     5000   // Thử kết nối lại mạng mỗi 5s
 
 // ─────────────────────────────────────────────────────────────
 //  ĐỐI TƯỢNG (OBJECTS)
@@ -335,8 +335,32 @@ void mqttCallback(const String& topicStr, const String& payload, const size_t si
 
   if (topic.indexOf(DEV_MODE) >= 0) {
     systemMode = (cmd == "MANUAL" || cmd == "OFF") ? "MANUAL" : "AUTO";
-    pubMode();
     Serial.println("🔄 [MODE] Đã chuyển chế độ hoạt động sang: " + systemMode);
+
+    // KHI CHUYỂN VỀ AUTO: Thực hiện đánh giá tự động cảm biến và đóng ngắt ngay lập tức
+    if (systemMode == "AUTO") {
+      if (!isnan(currentTemp)) {
+        if (currentTemp >= TEMP_AUTO_FAN) {
+          digitalWrite(PIN_FAN, RELAY_ON);
+        } else {
+          digitalWrite(PIN_FAN, RELAY_OFF);
+        }
+      }
+      if (lightLevelStr == "Yeu") {
+        digitalWrite(PIN_LED, RELAY_ON);
+      } else {
+        digitalWrite(PIN_LED, RELAY_OFF);
+      }
+    }
+
+    // ĐỒNG BỘ REALTIME TẤT CẢ THIẾT BỊ NGAY LẬP TỨC
+    pubMode(); wsClient.loop(); delay(20);
+    pubLed();  wsClient.loop(); delay(20);
+    pubFan();  wsClient.loop(); delay(20);
+    pubDoor(); wsClient.loop(); delay(20);
+    if (!isnan(currentTemp)) pubTemp(currentTemp);
+    if (!isnan(currentHumi)) pubHumi(currentHumi);
+    pubLight(lightLevelStr);
   }
   else if (topic.indexOf(DEV_LED) >= 0) {
     digitalWrite(PIN_LED, cmd == "ON" ? RELAY_ON : RELAY_OFF);
@@ -365,36 +389,40 @@ void reconnectMQTT() {
 
     if (mqttClient.connect(clientId, "", "")) {
       Serial.println("Thành công!");
-      pubOnline(); wsClient.loop(); delay(50);
+      pubOnline(); wsClient.loop(); delay(30);
 
       mqttClient.subscribe("cmnd/" + String(DEV_MODE) + "/POWER", [](const char* payload, unsigned int size) {
         String cmd = ""; for(unsigned int i=0; i<size; i++) cmd += payload[i];
         mqttCallback("cmnd/" + String(DEV_MODE) + "/POWER", cmd, size);
       });
-      wsClient.loop(); delay(50);
+      wsClient.loop(); delay(30);
 
       mqttClient.subscribe("cmnd/" + String(DEV_LED) + "/POWER", [](const char* payload, unsigned int size) {
         String cmd = ""; for(unsigned int i=0; i<size; i++) cmd += payload[i];
         mqttCallback("cmnd/" + String(DEV_LED) + "/POWER", cmd, size);
       });
-      wsClient.loop(); delay(50);
+      wsClient.loop(); delay(30);
 
       mqttClient.subscribe("cmnd/" + String(DEV_FAN) + "/POWER", [](const char* payload, unsigned int size) {
         String cmd = ""; for(unsigned int i=0; i<size; i++) cmd += payload[i];
         mqttCallback("cmnd/" + String(DEV_FAN) + "/POWER", cmd, size);
       });
-      wsClient.loop(); delay(50);
+      wsClient.loop(); delay(30);
 
       mqttClient.subscribe("cmnd/" + String(DEV_DOOR) + "/POWER", [](const char* payload, unsigned int size) {
         String cmd = ""; for(unsigned int i=0; i<size; i++) cmd += payload[i];
         mqttCallback("cmnd/" + String(DEV_DOOR) + "/POWER", cmd, size);
       });
-      wsClient.loop(); delay(50);
+      wsClient.loop(); delay(30);
 
-      pubMode(); wsClient.loop(); delay(50);
-      pubLed(); wsClient.loop(); delay(50);
-      pubFan(); wsClient.loop(); delay(50);
-      pubDoor(); wsClient.loop();
+      // ĐỒNG BỘ TOÀN BỘ TRẠNG THÁI KHI VỪA CẮM ĐIỆN / KẾT NỐI MẠNG LẠI
+      pubMode();  wsClient.loop(); delay(20);
+      pubLed();   wsClient.loop(); delay(20);
+      pubFan();   wsClient.loop(); delay(20);
+      pubDoor();  wsClient.loop(); delay(20);
+      pubLight(lightLevelStr); wsClient.loop(); delay(20);
+      if (!isnan(currentTemp)) pubTemp(currentTemp);
+      if (!isnan(currentHumi)) pubHumi(currentHumi);
     } else {
       Serial.println("Lỗi hoặc đang thiết lập WebSockets...");
     }

@@ -92,6 +92,7 @@ class MqttService extends ChangeNotifier {
       'tele/classroom_fan/status',
       'tele/classroom_door/status',
       'tele/classroom_rfid/status',
+      'tele/classroom_mode/status',
     ];
     
     for (var node in nodes) {
