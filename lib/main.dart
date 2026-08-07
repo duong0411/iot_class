@@ -51,15 +51,29 @@ class MyApp extends StatelessWidget {
           ErrorWidget.builder = (details) {
             return Material(
               color: AppTheme.bgDark,
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Text(
-                    kDebugMode
-                        ? details.exceptionAsString()
-                        : 'Đã xảy ra lỗi. Vui lòng mở lại ứng dụng.',
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: AppTheme.textPrimary),
+              child: SafeArea(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: SingleChildScrollView(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.warning_amber_rounded, color: Colors.amberAccent, size: 54),
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Thông Báo Giao Diện',
+                            style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            details.exceptionAsString(),
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.white70, fontSize: 13),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),

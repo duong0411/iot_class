@@ -31,7 +31,7 @@ class MqttService extends ChangeNotifier {
 
     final clientId = 'flutter_${DateTime.now().millisecondsSinceEpoch}';
 
-    _client = MqttServerClient('wss://mqtt.aiotlearninghub.com/mqtt', clientId);
+    _client = MqttServerClient('mqtt.aiotlearninghub.com', clientId);
     _client!.port = port;
     _client!.useWebSocket = true;
     _client!.websocketProtocols = MqttClientConstants.protocolsSingleDefault;
@@ -167,6 +167,16 @@ class MqttService extends ChangeNotifier {
 
   void publishScheduleGet() {
     publish('cmnd/classroom_schedule/get', '{}');
+  }
+
+  // Helper phát giọng nói trực tiếp qua loa Xiaozhi ESP32
+  void publishTtsSay(String prompt) {
+    final payload = jsonEncode({
+      'prompt': prompt,
+      'text': prompt,
+      'emotion': 'happy',
+    });
+    publish('cmnd/xiaozhi_tts/say', payload);
   }
 
   // ═══════════════════════════════════════════════════════════
