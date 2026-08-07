@@ -52,19 +52,27 @@ jobs:
           cache: true
 
       - run: flutter pub get
-      - name: Build iOS release (no codesign)
-        env:
-          CODE_SIGNING_ALLOWED: "NO"
-          CODE_SIGNING_REQUIRED: "NO"
-          CODE_SIGN_IDENTITY: ""
-          AD_HOC_CODE_SIGNING_ALLOWED: "YES"
-        run: flutter build ios --release --no-codesign
+      - name: Prepare Flutter iOS build
+        run: flutter build ios --release --no-codesign --config-only
+
+      - name: Build iOS App via xcodebuild
+        run: |
+          xcodebuild -workspace ios/Runner.xcworkspace \
+            -scheme Runner \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build/ios \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES \
+            build
 
       - name: Package IPA
         run: |
           set -euo pipefail
           mkdir -p build/ios/ipa/Payload
-          cp -R build/ios/iphoneos/Runner.app build/ios/ipa/Payload/
+          cp -R build/ios/Build/Products/Release-iphoneos/Runner.app build/ios/ipa/Payload/
           cd build/ios/ipa
           zip -qq -r -9 AloT-unsigned.ipa Payload
 
