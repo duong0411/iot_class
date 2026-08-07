@@ -51,39 +51,28 @@ class XiaoZhiService {
     this.reconnectTimeout = setTimeout(() => this.connect(), 5000);
   }
 
-  // BỘ LỊCH HÀNG NGÀY: 7:45 mở thiết bị | 17:00 tắt hết (TTS do ESP phát local)
+  // BỘ LỊCH TỰ ĐỘNG ĐỘNG (Chỉ nhắc nhở giọng nói, không tự động bật/tắt thiết bị)
   startClassroomScheduler() {
     if (this.schedulerInterval) return;
 
-    let lastTriggeredMinute = -1;
-    console.log('⏰ Bộ lịch lớp học: 7:45 BẬT + TTS(ESP) | 17:00 TẮT + TTS(ESP)');
+    console.log('⏰ Bộ lịch lớp học (Chỉ nhắc nhở giọng nói Xiaozhi) đã khởi chạy!');
 
     this.schedulerInterval = setInterval(() => {
       const now = new Date();
       const hours = now.getHours();
       const minutes = now.getMinutes();
-      const currentMinuteId = hours * 60 + minutes;
+      const currentDay = now.getDate();
 
-      if (currentMinuteId === lastTriggeredMinute) return;
-
-      // 7:45 — truy bài: bật thiết bị (ESP tự phát TTS local cùng lúc)
-      if (hours === 7 && minutes === 45) {
-        lastTriggeredMinute = currentMinuteId;
-        console.log('⏰ [7:45] Truy bài → MCP ON devices');
-        this.runMcpToolLocal('control_all_devices', { state: 'ON' });
-        this.runMcpToolLocal('control_door', { mode: 'open' });
-        this.runMcpToolLocal('set_classroom_mode', { mode: 'MANUAL' });
-      }
-
-      // 17:00 — ra về: tắt hết thiết bị (ESP tự phát TTS local cùng lúc)
-      if (hours === 17 && minutes === 0) {
-        lastTriggeredMinute = currentMinuteId;
-        console.log('⏰ [17:00] Tan học → MCP OFF devices');
-        this.runMcpToolLocal('control_all_devices', { state: 'OFF' });
-        this.runMcpToolLocal('control_door', { mode: 'close' });
-        this.runMcpToolLocal('control_light', { state: 'OFF' });
-        this.runMcpToolLocal('control_fan', { state: 'OFF' });
-      }
+      const schedules = mqttService.schedules || [];
+      schedules.forEach(sch => {
+        if (sch.enabled && sch.hour === hours && sch.minute === minutes) {
+          if (sch.lastTriggeredDay !== currentDay) {
+            sch.lastTriggeredDay = currentDay;
+            console.log(`⏰ [Lịch Nhắc Nhở %02d:%02d] 🔔 Lời dẫn: ${sch.prompt}`);
+            // Đã bỏ tính năng tự động bật/tắt thiết bị. Lời dẫn phát âm trực tiếp do ESP32 đảm nhận.
+          }
+        }
+      });
     }, 10000);
   }
 

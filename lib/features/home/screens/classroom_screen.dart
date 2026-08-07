@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../../../core/providers/device_provider.dart';
 import '../../../core/providers/student_provider.dart';
+import '../widgets/schedule_management_dialog.dart';
 
 class ClassroomScreen extends StatelessWidget {
   const ClassroomScreen({super.key});
@@ -29,6 +30,16 @@ class ClassroomScreen extends StatelessWidget {
           ],
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.alarm_on, color: Colors.cyanAccent),
+            tooltip: 'Lịch Auto & Lời Dẫn Xiaozhi',
+            onPressed: () {
+              showDialog(
+                context: context,
+                builder: (context) => const ScheduleManagementDialog(),
+              );
+            },
+          ),
           Container(
             margin: const EdgeInsets.only(right: 16),
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -196,6 +207,65 @@ class ClassroomScreen extends StatelessWidget {
                     ),
                   ),
                 ],
+              ),
+
+              const SizedBox(height: 16),
+
+              // THẺ CÀI ĐẶT LỊCH AUTOMATION & LỜI DẪN XIAOZHI
+              InkWell(
+                onTap: () {
+                  showDialog(
+                    context: context,
+                    builder: (context) => const ScheduleManagementDialog(),
+                  );
+                },
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF0F766E), Color(0xFF0D9488)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.teal.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.alarm_on, color: Colors.cyanAccent, size: 32),
+                      SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Cài Đặt Lịch Auto & Lời Dẫn Xiaozhi',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 15,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            SizedBox(height: 4),
+                            Text(
+                              'Đặt giờ tự động và tùy chỉnh lời nói của Xiaozhi ESP32 từ xa qua MQTT',
+                              style: TextStyle(color: Colors.white70, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.chevron_right, color: Colors.white70),
+                    ],
+                  ),
+                ),
               ),
 
               const SizedBox(height: 16),

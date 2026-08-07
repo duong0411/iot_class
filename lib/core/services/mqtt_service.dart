@@ -93,6 +93,7 @@ class MqttService extends ChangeNotifier {
       'tele/classroom_door/status',
       'tele/classroom_rfid/status',
       'tele/classroom_mode/status',
+      'stat/classroom_schedule/list',
     ];
     
     for (var node in nodes) {
@@ -118,14 +119,10 @@ class MqttService extends ChangeNotifier {
           recMsg.payload.message);
       final topic = c[0].topic;
 
-      // if (kDebugMode) {
-      //   print('MQTT RX: [$topic] → $payload');
-      // }
-
       dynamic value;
       try {
         final json = jsonDecode(payload);
-        value = json['value'];
+        value = json['value'] ?? json;
       } catch (_) {
         value = payload.trim();
       }
@@ -155,6 +152,21 @@ class MqttService extends ChangeNotifier {
   // Helper cho lệnh
   void publishCommand(String chipId, String deviceSuffix, String command) {
     publish('cmnd/${chipId}_$deviceSuffix/POWER', command);
+  }
+
+  // Helper cho Lịch Tự Động & Lời Dẫn Xiaozhi
+  void publishScheduleSet(List<Map<String, dynamic>> schedules) {
+    final payload = jsonEncode({'schedules': schedules});
+    publish('cmnd/classroom_schedule/set', payload);
+  }
+
+  void publishScheduleDelete(String scheduleId) {
+    final payload = jsonEncode({'id': scheduleId});
+    publish('cmnd/classroom_schedule/delete', payload);
+  }
+
+  void publishScheduleGet() {
+    publish('cmnd/classroom_schedule/get', '{}');
   }
 
   // ═══════════════════════════════════════════════════════════

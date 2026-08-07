@@ -13,6 +13,10 @@ class MqttService {
       door: "Đóng (0°)",
       mode: "AUTO (Tự động theo cảm biến)"
     };
+    this.schedules = [
+      { id: 'sched_morning', hour: 7, minute: 45, prompt: 'Đã đến giờ truy bài, các bạn học sinh chuẩn bị vào lớp!', enabled: true, action: 'NONE', lastTriggeredDay: -1 },
+      { id: 'sched_evening', hour: 17, minute: 0, prompt: 'Đã đến giờ tan học, các bạn học sinh có thể ra về!', enabled: true, action: 'NONE', lastTriggeredDay: -1 }
+    ];
   }
 
   async connect() {
@@ -51,6 +55,7 @@ class MqttService {
       'tele/classroom_door/status',
       'tele/classroom_rfid/status',
       'tele/classroom_mode/status',
+      'cmnd/classroom_schedule/set',
       'tele/+/status'
     ];
 
@@ -60,7 +65,7 @@ class MqttService {
         this.subscribedTopics.add(t);
       }
     });
-    console.log('📡 Backend đã subscribe đầy đủ các Topic Telemetry của Lớp Học Thông Minh!');
+    console.log('📡 Backend đã subscribe đầy đủ các Topic Telemetry & Schedule của Lớp Học Thông Minh!');
   }
 
   handleMessage(topic, message) {
@@ -71,6 +76,15 @@ class MqttService {
       const json = JSON.parse(payloadStr);
       if (json.value !== undefined) {
         valStr = String(json.value);
+      }
+
+      if (topic === 'cmnd/classroom_schedule/set' && json.schedules && Array.isArray(json.schedules)) {
+        this.schedules = json.schedules.map(s => ({
+          ...s,
+          lastTriggeredDay: -1
+        }));
+        console.log(`⏰ [Backend Schedule Update] Cập nhật ${this.schedules.length} mốc lịch tự động từ App!`);
+        return;
       }
     } catch (e) {
       valStr = payloadStr;
