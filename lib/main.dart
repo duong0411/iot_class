@@ -6,6 +6,7 @@ import 'core/theme/app_theme.dart';
 import 'core/providers/auth_provider.dart';
 import 'core/providers/device_provider.dart';
 import 'core/providers/student_provider.dart';
+import 'core/services/mqtt_service.dart';
 import 'features/auth/screens/splash_screen.dart';
 
 void main() async {
@@ -40,6 +41,7 @@ class MyApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => AuthProvider()),
         ChangeNotifierProvider(create: (_) => StudentProvider()),
+        ChangeNotifierProvider(create: (_) => MqttService()),
         ChangeNotifierProvider(create: (_) => DeviceProvider()),
       ],
       child: MaterialApp(

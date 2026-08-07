@@ -13,6 +13,7 @@ class DeviceProvider extends ChangeNotifier {
 
   List<NodeModel> _nodes = [];
   List<NodeModel> get nodes => _nodes;
+  MqttService get mqttService => _mqttService;
 
   final Map<String, Timer?> _watchdogs = {};
 

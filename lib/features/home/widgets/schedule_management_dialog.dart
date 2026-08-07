@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/models/schedule_model.dart';
+import '../../../core/providers/device_provider.dart';
 import '../../../core/services/mqtt_service.dart';
 
 class ScheduleManagementDialog extends StatefulWidget {
@@ -69,16 +70,30 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
     await prefs.setString(_storageKey, jsonEncode(jsonList));
   }
 
-  void _saveAndPublish(MqttService mqttService) {
+  MqttService? _getMqttService(BuildContext context) {
+    try {
+      return Provider.of<MqttService>(context, listen: false);
+    } catch (_) {
+      try {
+        final devProvider = Provider.of<DeviceProvider>(context, listen: false);
+        return devProvider.mqttService;
+      } catch (_) {
+        return null;
+      }
+    }
+  }
+
+  void _saveAndPublish(BuildContext context) {
     _saveSchedules();
-    final jsonList = _schedules.map((e) => e.toJson()).toList();
-    mqttService.publishScheduleSet(jsonList);
+    final mqttService = _getMqttService(context);
+    if (mqttService != null) {
+      final jsonList = _schedules.map((e) => e.toJson()).toList();
+      mqttService.publishScheduleSet(jsonList);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final mqttService = Provider.of<MqttService>(context, listen: false);
-
     return Dialog(
       backgroundColor: const Color(0xFF1E293B),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -112,7 +127,7 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
             ),
             const SizedBox(height: 6),
             const Text(
-              'Cài đặt mốc giờ tự động, chỉnh sửa lời dẫn và phát thử qua Loa Xiaozhi',
+              'Cài đặt mốc giờ tự động và chỉnh sửa lời dẫn qua Loa Xiaozhi',
               style: TextStyle(color: Colors.white60, fontSize: 12),
             ),
             const Divider(color: Colors.white24, height: 24),
@@ -157,33 +172,6 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                                           fontWeight: FontWeight.bold,
                                         ),
                                       ),
-                                      const SizedBox(width: 10),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: item.action == 'ON'
-                                              ? Colors.green.withOpacity(0.2)
-                                              : item.action == 'OFF'
-                                                  ? Colors.red.withOpacity(0.2)
-                                                  : Colors.grey.withOpacity(0.2),
-                                          borderRadius: BorderRadius.circular(6),
-                                        ),
-                                        child: Text(
-                                          item.action == 'ON'
-                                              ? 'Bật TB'
-                                              : item.action == 'OFF'
-                                                  ? 'Tắt TB'
-                                                  : 'Chỉ đọc',
-                                          style: TextStyle(
-                                            color: item.action == 'ON'
-                                                ? Colors.greenAccent
-                                                : item.action == 'OFF'
-                                                    ? Colors.redAccent
-                                                    : Colors.white70,
-                                            fontSize: 11,
-                                          ),
-                                        ),
-                                      ),
                                       const Spacer(),
                                       // Switch ON/OFF
                                       Switch(
@@ -193,7 +181,7 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                                           setState(() {
                                             _schedules[index] = item.copyWith(enabled: val);
                                           });
-                                          _saveAndPublish(mqttService);
+                                          _saveAndPublish(context);
                                         },
                                       ),
                                       // Edit Button
@@ -210,7 +198,7 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                                           setState(() {
                                             _schedules.removeAt(index);
                                           });
-                                          _saveAndPublish(mqttService);
+                                          _saveAndPublish(context);
                                         },
                                       ),
                                     ],
@@ -231,36 +219,6 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                                           ),
                                         ),
                                       ),
-                                      // Test Speak Button
-                                      if (item.prompt.isNotEmpty)
-                                        InkWell(
-                                          onTap: () {
-                                            mqttService.publishTtsSay(item.prompt);
-                                            ScaffoldMessenger.of(context).showSnackBar(
-                                              SnackBar(
-                                                content: Text('📢 Đã phát câu thoại thử: "${item.prompt}"'),
-                                                backgroundColor: Colors.cyan,
-                                                duration: const Duration(seconds: 2),
-                                              ),
-                                            );
-                                          },
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: Colors.amber.withOpacity(0.2),
-                                              borderRadius: BorderRadius.circular(6),
-                                              border: Border.all(color: Colors.amberAccent, width: 0.8),
-                                            ),
-                                            child: const Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(Icons.volume_up, color: Colors.amberAccent, size: 14),
-                                                SizedBox(width: 4),
-                                                Text('Phát thử', style: TextStyle(color: Colors.amberAccent, fontSize: 11, fontWeight: FontWeight.bold)),
-                                              ],
-                                            ),
-                                          ),
-                                        ),
                                     ],
                                   ),
                                 ],
@@ -290,7 +248,7 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () {
-                      _saveAndPublish(mqttService);
+                      _saveAndPublish(context);
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('✅ Đã lưu và gửi toàn bộ Lịch tự động qua MQTT!'),
@@ -318,7 +276,6 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
   void _showAddDialog(BuildContext context) {
     TimeOfDay selectedTime = TimeOfDay.now();
     final promptController = TextEditingController();
-    String selectedAction = 'NONE';
 
     showDialog(
       context: context,
@@ -364,27 +321,6 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                         focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.cyanAccent)),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: selectedAction,
-                      dropdownColor: const Color(0xFF1E293B),
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
-                        labelText: 'Hành động thiết bị',
-                        labelStyle: TextStyle(color: Colors.cyanAccent),
-                        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                      ),
-                      items: const [
-                        DropdownMenuItem(value: 'NONE', child: Text('Chỉ phát giọng nói')),
-                        DropdownMenuItem(value: 'ON', child: Text('Bật tất cả thiết bị + Nói')),
-                        DropdownMenuItem(value: 'OFF', child: Text('Tắt tất cả thiết bị + Nói')),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) {
-                          setDialogState(() => selectedAction = val);
-                        }
-                      },
-                    ),
                   ],
                 ),
               ),
@@ -395,7 +331,6 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                 ),
                 ElevatedButton(
                   onPressed: () {
-                    final mqttService = Provider.of<MqttService>(context, listen: false);
                     setState(() {
                       _schedules.add(
                         ScheduleModel(
@@ -404,11 +339,11 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                           minute: selectedTime.minute,
                           prompt: promptController.text.trim(),
                           enabled: true,
-                          action: selectedAction,
+                          action: 'NONE',
                         ),
                       );
                     });
-                    _saveAndPublish(mqttService);
+                    _saveAndPublish(context);
                     Navigator.pop(ctx);
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent),
@@ -426,7 +361,6 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
     final item = _schedules[index];
     TimeOfDay selectedTime = TimeOfDay(hour: item.hour, minute: item.minute);
     final promptController = TextEditingController(text: item.prompt);
-    String selectedAction = item.action;
 
     showDialog(
       context: context,
@@ -472,27 +406,6 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                         focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.cyanAccent)),
                       ),
                     ),
-                    const SizedBox(height: 12),
-                    DropdownButtonFormField<String>(
-                      initialValue: selectedAction,
-                      dropdownColor: const Color(0xFF1E293B),
-                      style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
-                        labelText: 'Hành động thiết bị',
-                        labelStyle: TextStyle(color: Colors.cyanAccent),
-                        enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
-                      ),
-                      items: const [
-                        DropdownMenuItem(value: 'NONE', child: Text('Chỉ phát giọng nói')),
-                        DropdownMenuItem(value: 'ON', child: Text('Bật tất cả thiết bị + Nói')),
-                        DropdownMenuItem(value: 'OFF', child: Text('Tắt tất cả thiết bị + Nói')),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) {
-                          setDialogState(() => selectedAction = val);
-                        }
-                      },
-                    ),
                   ],
                 ),
               ),
@@ -503,16 +416,15 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                 ),
                 ElevatedButton(
                   onPressed: () {
-                    final mqttService = Provider.of<MqttService>(context, listen: false);
                     setState(() {
                       _schedules[index] = item.copyWith(
                         hour: selectedTime.hour,
                         minute: selectedTime.minute,
                         prompt: promptController.text.trim(),
-                        action: selectedAction,
+                        action: 'NONE',
                       );
                     });
-                    _saveAndPublish(mqttService);
+                    _saveAndPublish(context);
                     Navigator.pop(ctx);
                   },
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent),
