@@ -168,7 +168,7 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                                     child: Text(
                                       item.prompt.isEmpty ? '(Không có lời dẫn)' : '"${item.prompt}"',
                                       style: const TextStyle(
-                                        color: Colors.white87,
+                                        color: Colors.white70,
                                         fontSize: 13,
                                         fontStyle: FontStyle.italic,
                                       ),
