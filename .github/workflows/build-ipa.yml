@@ -33,7 +33,7 @@ jobs:
 
       # Project dùng Swift Package Manager — không có Podfile
       - name: Build iOS release (no codesign)
-        run: flutter build ios --release --no-codesign --extra-build-args="CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=''"
+        run: flutter build ios --release --no-codesign
 
       - name: Package unsigned IPA
         run: |
