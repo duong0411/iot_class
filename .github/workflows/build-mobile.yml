@@ -52,7 +52,13 @@ jobs:
           cache: true
 
       - run: flutter pub get
-      - run: flutter build ios --release --no-codesign
+      - run: |
+          flutter build ios --release --no-codesign \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            AD_HOC_CODE_SIGNING_ALLOWED=YES
 
       - name: Package IPA
         run: |
