@@ -14,15 +14,18 @@ class TtsService {
    * Generates a Vietnamese MP3 audio file for the given text prompt.
    * Saves to public/audio/{scheduleId}.mp3 and returns the relative URL.
    */
-  async generateVietnameseTts(scheduleId, textPrompt) {
+  async generateVietnameseTts(customFilenameOrId, textPrompt) {
     let cleanPrompt = (textPrompt || '').replace(/[^\p{L}\p{N}\s.,!?-]/gu, ' ').replace(/\s+/g, ' ').trim();
     if (!cleanPrompt || cleanPrompt.length < 2) {
       cleanPrompt = 'Đã đến giờ thông báo tự động!';
     }
 
     try {
-      const sanitizedId = scheduleId.replace(/[^a-zA-Z0-9_-]/g, '_');
-      const filename = `${sanitizedId}.mp3`;
+      let filename = customFilenameOrId;
+      if (!filename.endsWith('.mp3')) {
+        const sanitizedId = customFilenameOrId.replace(/[^a-zA-Z0-9_-]/g, '_');
+        filename = `${sanitizedId}.mp3`;
+      }
       const filePath = path.join(this.publicDir, filename);
 
       console.log(`🎙️ [TTS Generator] Generating Vietnamese audio for prompt: "${cleanPrompt}"...`);

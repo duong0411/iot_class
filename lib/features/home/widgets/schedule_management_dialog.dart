@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../../core/models/schedule_model.dart';
@@ -86,9 +87,23 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
 
   Future<void> _saveAndPublish(BuildContext context) async {
     await _saveSchedules();
+    final jsonList = _schedules.map((e) => e.toJson()).toList();
+
+    // 1. Gửi HTTP POST đồng bộ tới Cloud Server https://duynguyen.io.vn (Không phụ thuộc MQTT)
+    try {
+      final response = await http.post(
+        Uri.parse('https://duynguyen.io.vn/api/schedule'),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'schedules': jsonList}),
+      ).timeout(const Duration(seconds: 4));
+      if (kDebugMode) print('HTTP Schedule Sync Status: ${response.statusCode}');
+    } catch (e) {
+      if (kDebugMode) print('HTTP Schedule Sync Error: $e');
+    }
+
+    // 2. Publish MQTT cho các dịch vụ khác (nếu có)
     final mqttService = _getMqttService(context);
     if (mqttService != null) {
-      final jsonList = _schedules.map((e) => e.toJson()).toList();
       if (kDebugMode) print('Publishing ${jsonList.length} schedules to MQTT...');
       mqttService.publishScheduleSet(jsonList);
     }

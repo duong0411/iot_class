@@ -8,6 +8,7 @@ require('./config/firebase');
 
 const authRoutes = require('./routes/auth.routes');
 const nodeRoutes = require('./routes/node.routes');
+const ttsRoutes = require('./routes/tts.routes');
 const MqttService = require('./services/mqtt.service');
 const XiaoZhiService = require('./services/xiaozhi.service');
 
@@ -42,6 +43,42 @@ app.use('/api/auth', authRoutes);
 // Vô hiệu hoá deviceRoutes cũ
 // app.use('/api/devices', deviceRoutes); 
 app.use('/api/nodes', nodeRoutes);
+app.use('/api/tts', ttsRoutes);
+
+// HTTP Endpoint phục vụ Xiaozhi ESP32 gọi trực tiếp tải danh sách Lịch & MP3 Voice URL (Không qua MQTT)
+let httpSchedules = [];
+
+app.get('/api/schedule', (req, res) => {
+  const mqttService = require('./services/mqtt.service');
+  const schedules = (mqttService.schedules && mqttService.schedules.length > 0) ? mqttService.schedules : httpSchedules;
+  res.json({ schedules });
+});
+
+app.post('/api/schedule', async (req, res) => {
+  const { schedules } = req.body;
+  if (Array.isArray(schedules)) {
+    const ttsService = require('./services/tts.service');
+    const serverBaseUrl = process.env.SERVER_BASE_URL || 'https://duynguyen.io.vn';
+
+    httpSchedules = await Promise.all(schedules.map(async s => {
+      const filename = `voice_${s.hour ?? 0}h${s.minute ?? 0}.mp3`;
+      if (s.prompt) {
+        await ttsService.generateVietnameseTts(filename, s.prompt);
+      }
+      return {
+        ...s,
+        audio_url: `${serverBaseUrl}/audio/${filename}`
+      };
+    }));
+
+    const mqttService = require('./services/mqtt.service');
+    mqttService.schedules = httpSchedules;
+
+    console.log(`📡 [HTTP API /api/schedule] Updated ${httpSchedules.length} schedules via HTTP Cloud!`);
+    return res.json({ success: true, message: 'Đã cập nhật lịch qua HTTP thành công!', schedules: httpSchedules });
+  }
+  return res.status(400).json({ success: false, message: 'Invalid payload' });
+});
 
 // Test: kích hoạt cùng logic lịch (MCP tools qua MQTT)
 app.get('/api/test/truy-bai', (req, res) => {

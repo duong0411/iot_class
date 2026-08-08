@@ -103,15 +103,22 @@ class MqttService {
             s.lastTriggeredDay = currentDay;
             console.log(`⏰ [AUTOMATION TRIGGER] Đã đến giờ ${s.hour}:${s.minute}! Phát lời dẫn: "${s.prompt}"`);
 
+            // 1. Phát trực tiếp qua Topic MQTT cmnd/xiaozhi_tts/say tới Loa Xiaozhi ESP32
             const ttsPayload = JSON.stringify({
               prompt: s.prompt,
               text: s.prompt,
-              audio_url: s.audioUrl || `${process.env.SERVER_BASE_URL || 'http://localhost:3001'}/audio/${s.id}.mp3`,
+              audio_url: s.audioUrl || `${process.env.SERVER_BASE_URL || 'https://duynguyen.io.vn'}/audio/${s.id}.mp3`,
               say: true
             });
 
-            // 1. Phát trực tiếp qua Topic MQTT cmnd/xiaozhi_tts/say tới Loa Xiaozhi ESP32
             this.publish('cmnd/xiaozhi_tts/say', ttsPayload);
+
+            try {
+              const XiaoZhiService = require('./xiaozhi.service');
+              XiaoZhiService.sendTtsSay(s.prompt);
+            } catch (err) {
+              console.error('❌ Lỗi gửi voice qua Xiaozhi Service:', err.message);
+            }
 
             // 2. Tự động bật/tắt thiết bị nếu là mốc giờ học / tan học
             if (s.hour === 7 && s.minute === 45) {
@@ -150,12 +157,15 @@ class MqttService {
 
           this.schedules = json.schedules.map(s => {
             const promptStr = (s.prompt || '').trim();
-            const schedId = s.id || `sched_${Date.now()}`;
-            // Async generate TTS mp3
+            const schedId = s.id || `sched_${s.hour ?? 0}h${s.minute ?? 0}`;
+            // Đặt tên file định danh chuẩn theo mốc giờ của lịch (vd: voice_14h52.mp3)
+            // Đảm bảo mỗi mốc lịch chỉ lưu DUY NHẤT 1 file voice, không bị đẻ thêm file rác
+            const filename = `voice_${s.hour ?? 0}h${s.minute ?? 0}.mp3`;
+
             if (promptStr) {
-              ttsService.generateVietnameseTts(schedId, promptStr).then(filename => {
-                if (filename) {
-                  console.log(`🎙️ [TTS Service] Pre-generated MP3 file: ${filename} for schedule: ${schedId}`);
+              ttsService.generateVietnameseTts(filename, promptStr).then(resFile => {
+                if (resFile) {
+                  console.log(`🎙️ [TTS Service] Generated MP3 voice for schedule: ${filename}`);
                 }
               });
             }
@@ -163,7 +173,7 @@ class MqttService {
               ...s,
               id: schedId,
               prompt: promptStr,
-              audioUrl: `${serverBaseUrl}/audio/${schedId}.mp3`,
+              audioUrl: `${serverBaseUrl}/audio/${filename}`,
               lastTriggeredDay: -1
             };
           });
