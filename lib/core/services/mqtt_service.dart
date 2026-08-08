@@ -32,7 +32,8 @@ class MqttService extends ChangeNotifier {
 
     final clientId = 'flutter_${DateTime.now().millisecondsSinceEpoch}';
 
-    _client = MqttServerClient.withPort(brokerHost, clientId, port);
+    _client = MqttServerClient(wssUrl, clientId);
+    _client!.port = port;
     _client!.useWebSocket = true;
     _client!.secure = true;
     _client!.websocketProtocols = MqttClientConstants.protocolsSingleDefault;

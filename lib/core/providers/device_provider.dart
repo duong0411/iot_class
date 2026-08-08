@@ -24,6 +24,7 @@ class DeviceProvider extends ChangeNotifier {
   }
 
   Future<void> _init() async {
+    _startClassroomWatchdog();
     await fetchNodes();
     await _connectMqtt();
   }
