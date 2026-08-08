@@ -32,7 +32,7 @@ class MqttService extends ChangeNotifier {
 
     final clientId = 'flutter_${DateTime.now().millisecondsSinceEpoch}';
 
-    _client = MqttServerClient.withPort(wssUrl, clientId, port);
+    _client = MqttServerClient.withPort(brokerHost, clientId, port);
     _client!.useWebSocket = true;
     _client!.websocketProtocols = MqttClientConstants.protocolsSingleDefault;
 
@@ -156,7 +156,7 @@ class MqttService extends ChangeNotifier {
 
     try {
       final builder = MqttClientPayloadBuilder();
-      builder.addString(message);
+      builder.addUTF8String(message);
 
       if (kDebugMode) print('MQTT TX: [$topic] → $message');
       _client!.publishMessage(topic, MqttQos.atLeastOnce, builder.payload!);

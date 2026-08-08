@@ -11,12 +11,15 @@ const nodeRoutes = require('./routes/node.routes');
 const MqttService = require('./services/mqtt.service');
 const XiaoZhiService = require('./services/xiaozhi.service');
 
+const path = require('path');
+
 const app = express();
 
 // Middleware
 app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use('/audio', express.static(path.join(__dirname, 'public/audio')));
 
 // Connect to MongoDB
 mongoose.connect(process.env.MONGODB_URI)

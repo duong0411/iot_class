@@ -9,6 +9,7 @@ class XiaoZhiService {
     this.ws = null;
     this.reconnectTimeout = null;
     this.pingInterval = null;
+    this.schedulerInterval = null;
   }
 
   connect() {
@@ -26,7 +27,7 @@ class XiaoZhiService {
         }
       }, 25000);
 
-      // Khởi chạy Bộ Lịch Tự Động (Truy bài 7h45 & Tan học)
+      // Khởi chạy Bộ Lịch Tự Động từ Mobile App qua MQTT
       this.startClassroomScheduler();
     });
 
@@ -51,11 +52,11 @@ class XiaoZhiService {
     this.reconnectTimeout = setTimeout(() => this.connect(), 5000);
   }
 
-  // BỘ LỊCH TỰ ĐỘNG ĐỘNG (Chỉ nhắc nhở giọng nói, không tự động bật/tắt thiết bị)
+  // BỘ LỊCH TỰ ĐỘNG ĐỘNG (Nhận dữ liệu từ Mobile App qua MQTT aiotlearninghub)
   startClassroomScheduler() {
     if (this.schedulerInterval) return;
 
-    console.log('⏰ Bộ lịch lớp học (Chỉ nhắc nhở giọng nói Xiaozhi) đã khởi chạy!');
+    console.log('⏰ Bộ lịch tự động Lớp học từ Mobile App (aiotlearninghub MQTT) đã kích hoạt!');
 
     this.schedulerInterval = setInterval(() => {
       const now = new Date();
@@ -68,19 +69,30 @@ class XiaoZhiService {
         if (sch.enabled && sch.hour === hours && sch.minute === minutes) {
           if (sch.lastTriggeredDay !== currentDay) {
             sch.lastTriggeredDay = currentDay;
-            console.log(`⏰ [Lịch Nhắc Nhở %02d:%02d] 🔔 Lời dẫn: ${sch.prompt}`);
-            // Đã bỏ tính năng tự động bật/tắt thiết bị. Lời dẫn phát âm trực tiếp do ESP32 đảm nhận.
+            console.log(`⏰ [Lịch Nhắc Nhở %02d:%02d] 🔔 Lời dẫn: "${sch.prompt}"`);
+            this.sendTtsSay(sch.prompt);
           }
         }
       });
     }, 10000);
   }
 
-  /**
-   * Gọi cùng logic tools/call MCP nhưng từ lịch backend (không cần LLM).
-   * Tools đăng ký: control_light, control_fan, control_door, set_classroom_mode,
-   * read_environment, control_all_devices.
-   */
+  sendTtsSay(promptText) {
+    if (!promptText) return;
+    console.log(`📢 [Xiaozhi Voice TTS] Đang phát câu thoại qua Xiaozhi: "${promptText}"`);
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      try {
+        this.ws.send(JSON.stringify({
+          jsonrpc: "2.0",
+          method: "notifications/message",
+          params: { message: promptText }
+        }));
+      } catch (e) {
+        console.error('❌ Lỗi khi gửi TTS message:', e.message);
+      }
+    }
+  }
+
   runMcpToolLocal(toolName, args = {}) {
     console.log(`🛠️ [Scheduler MCP] ${toolName}`, args);
 
@@ -109,87 +121,52 @@ class XiaoZhiService {
       responseText = `Mode ${mqttValue}.`;
     } else if (toolName === 'read_environment') {
       const cache = mqttService.envCache;
-      responseText =
-        `Báo cáo môi trường lớp học:\n` +
-        `- Nhiệt độ: ${cache.temp}°C\n` +
-        `- Độ ẩm: ${cache.humi}%\n` +
-        `- Ánh sáng: ${cache.light}\n` +
-        `- Đèn: ${cache.led}\n` +
-        `- Quạt: ${cache.fan}\n` +
-        `- Cửa: ${cache.door}\n` +
-        `- Chế độ: ${cache.mode}`;
-      console.log(`[Scheduler MCP] read_environment`);
-      return responseText;
+      responseText = `Thông số môi trường: Nhiệt độ ${cache.temp}°C, Độ ẩm ${cache.humi}%, ${cache.light}, Đèn ${cache.led}, Quạt ${cache.fan}, Cửa ${cache.door}, Chế độ ${cache.mode}.`;
     } else if (toolName === 'control_all_devices') {
-      mqttValue = args.state === 'ON' ? 'ON' : 'OFF';
-      if (mqttService.client) {
-        mqttService.client.publish('cmnd/classroom_led/POWER', mqttValue);
-        mqttService.client.publish('cmnd/classroom_fan/POWER', mqttValue);
-        console.log(`[Scheduler -> MQTT] ALL devices: ${mqttValue}`);
-      } else {
-        console.warn('[Scheduler MCP] MQTT client chưa sẵn sàng');
-      }
-      responseText = `Đã ${mqttValue === 'ON' ? 'bật' : 'tắt'} toàn bộ đèn và quạt.`;
+      const state = args.state === 'ON' ? 'ON' : 'OFF';
+      mqttService.publish('cmnd/classroom_led/POWER', state);
+      mqttService.publish('cmnd/classroom_fan/POWER', state);
+      responseText = `Đã ${state === 'ON' ? 'bật' : 'tắt'} toàn bộ thiết bị.`;
       return responseText;
-    } else {
-      console.warn(`[Scheduler MCP] Unknown tool: ${toolName}`);
-      return 'Tool không tồn tại.';
     }
 
-    if (mqttTopic && mqttService.client) {
-      mqttService.client.publish(mqttTopic, mqttValue);
-      console.log(`[Scheduler -> MQTT] ${mqttTopic} = ${mqttValue}`);
-    } else if (mqttTopic && !mqttService.client) {
-      console.warn('[Scheduler MCP] MQTT client chưa sẵn sàng');
+    if (mqttTopic && mqttValue) {
+      mqttService.publish(mqttTopic, mqttValue);
     }
 
     return responseText;
   }
 
-  broadcastVoiceAnnouncement(text) {
-    console.log(`📢 [XIAOZHI VOICE ANNOUNCEMENT]: "${text}"`);
+  send(dataObj) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.send({
-        jsonrpc: "2.0",
-        method: "notifications/message",
-        params: {
-          type: "text",
-          content: text
-        }
-      });
+      this.ws.send(JSON.stringify(dataObj));
     }
   }
 
-  send(msgObj) {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify(msgObj));
-    }
-  }
-
-  handleJsonRpc(messageStr) {
+  handleJsonRpc(jsonString) {
     let doc;
     try {
-      doc = JSON.parse(messageStr);
+      doc = JSON.parse(jsonString);
     } catch (e) {
       return;
     }
 
-    if (doc.method === 'ping') {
-      this.send({ jsonrpc: "2.0", id: doc.id, result: {} });
-      console.log(`[XiaoZhi MCP] Ping -> Pong`);
-    }
-    else if (doc.method === 'initialize') {
+    if (!doc || !doc.method) return;
+
+    if (doc.method === 'initialize') {
       this.send({
         jsonrpc: "2.0",
         id: doc.id,
         result: {
           protocolVersion: "2024-11-05",
-          capabilities: { experimental: {}, prompts: { listChanged: false }, resources: { subscribe: false, listChanged: false }, tools: { listChanged: false } },
-          serverInfo: { name: "Classroom-SmartHome-MCP", version: "2.0.0" }
+          capabilities: { tools: {} },
+          serverInfo: { name: "AloT Smart Classroom Server", version: "2.0.0" }
         }
       });
-      this.send({ jsonrpc: "2.0", method: "notifications/initialized" });
-      console.log(`[XiaoZhi MCP] Đã phản hồi Initialize cho Lớp Học Thông Minh!`);
+      console.log(`[XiaoZhi MCP] Trả lời initialize thành công!`);
+    } 
+    else if (doc.method === 'notifications/initialized') {
+      console.log(`[XiaoZhi MCP] Đã nhận notifications/initialized từ XiaoZhi Client.`);
     }
     else if (doc.method === 'tools/list') {
       this.send({
@@ -199,41 +176,41 @@ class XiaoZhiService {
           tools: [
             {
               name: "control_light",
-              description: "Điều khiển BẬT (ON) hoặc TẮT (OFF) hệ thống đèn chiếu sáng của lớp học thông minh.",
+              description: "Điều khiển bật (ON) hoặc tắt (OFF) đèn chiếu sáng trong lớp học thông minh.",
               inputSchema: {
                 type: "object",
                 properties: {
-                  state: { type: "string", enum: ["ON", "OFF"], description: "ON để bật đèn, OFF để tắt đèn lớp học" }
+                  state: { type: "string", enum: ["ON", "OFF"], description: "ON để bật đèn, OFF để tắt đèn" }
                 },
                 required: ["state"]
               }
             },
             {
               name: "control_fan",
-              description: "Điều khiển BẬT (ON) hoặc TẮT (OFF) hệ thống quạt mát / quạt thông gió của lớp học thông minh.",
+              description: "Điều khiển bật (ON) hoặc tắt (OFF) quạt làm mát trong lớp học thông minh.",
               inputSchema: {
                 type: "object",
                 properties: {
-                  state: { type: "string", enum: ["ON", "OFF"], description: "ON để bật quạt, OFF để tắt quạt lớp học" }
+                  state: { type: "string", enum: ["ON", "OFF"], description: "ON để bật quạt, OFF để tắt quạt" }
                 },
                 required: ["state"]
               }
             },
             {
               name: "control_door",
-              description: "Điều khiển MỞ (open/90) hoặc ĐÓNG (close/0) cửa lớp học / cửa sổ thông minh bằng góc Servo.",
+              description: "Điều khiển mở cửa (open / 90 độ), đóng cửa (close / 0 độ) hoặc quay góc tùy chọn.",
               inputSchema: {
                 type: "object",
                 properties: {
-                  mode: { type: "string", enum: ["open", "close", "angle"], description: "open: mở cửa 90 độ, close: đóng cửa 0 độ, angle: mở theo góc cụ thể" },
-                  angle: { type: "integer", description: "Góc mở cửa từ 0 đến 90 độ" }
+                  mode: { type: "string", enum: ["open", "close", "angle"], description: "open: mở 90 độ | close: đóng 0 độ | angle: góc tùy chọn" },
+                  angle: { type: "integer", minimum: 0, maximum: 180, description: "Góc quay servo từ 0 đến 180 độ" }
                 },
                 required: ["mode"]
               }
             },
             {
               name: "set_classroom_mode",
-              description: "Chuyển đổi chế độ hoạt động của lớp học thông minh giữa Tự động (AUTO - cảm biến tự bật tắt quạt đèn) và Thủ công (MANUAL - cho phép tự do điều khiển qua app/giọng nói).",
+              description: "Cài đặt chế độ hoạt động cho lớp học: AUTO (Tự động bật/tắt thiết bị theo cảm biến) hoặc MANUAL (Điều khiển thủ công).",
               inputSchema: {
                 type: "object",
                 properties: {
