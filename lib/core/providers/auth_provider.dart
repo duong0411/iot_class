@@ -17,24 +17,16 @@ class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
 
   Future<bool> checkAuthStatus() async {
-    _status = AuthStatus.loading;
+    _status = AuthStatus.authenticated;
+    _user = UserModel(
+      id: 'teacher_01',
+      name: 'Giáo Viên Lớp Học',
+      email: 'teacher@smartclassroom.edu.vn',
+      phone: '0901234567',
+      createdAt: DateTime.now(),
+    );
     notifyListeners();
-
-    try {
-      final savedUser = await _authService.loadSavedUser();
-      if (savedUser != null) {
-        _user = savedUser;
-        _status = AuthStatus.authenticated;
-        notifyListeners();
-        return true;
-      }
-    } catch (e) {
-      if (kDebugMode) print('Lỗi load user: $e');
-    }
-
-    _status = AuthStatus.unauthenticated;
-    notifyListeners();
-    return false;
+    return true;
   }
 
   Future<void> logout() async {

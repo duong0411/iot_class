@@ -26,7 +26,7 @@ mongoose.connect(process.env.MONGODB_URI)
   .then(() => {
     console.log('✅ Kết nối MongoDB thành công!');
     console.log(`📦 Database: ${process.env.MONGODB_URI}`);
-    
+
     // Khởi tạo MQTT Service lắng nghe cảnh báo
     const mqttService = require('./services/mqtt.service');
     mqttService.connect();
@@ -90,7 +90,7 @@ app.use((err, req, res, next) => {
   res.status(500).json({ success: false, message: 'Lỗi server nội bộ' });
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 AloT Smart Classroom Backend đang chạy tại http://0.0.0.0:${PORT}`);
   console.log(`📱 Flutter app kết nối tới Backend & XiaoZhi MCP Server qua MQTT WSS!`);

@@ -45,6 +45,13 @@ class DeviceProvider extends ChangeNotifier {
       });
       _mqttService.subscribeNodes(_nodes);
       notifyListeners();
+    } else {
+      // Tự động thử lại kết nối MQTT sau 3s nếu thất bại
+      Timer(const Duration(seconds: 3), () {
+        if (!_mqttService.isConnected) {
+          _connectMqtt();
+        }
+      });
     }
   }
 
@@ -121,7 +128,7 @@ class DeviceProvider extends ChangeNotifier {
     _classroomWatchdogTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       final shouldBeOnline = isMqttConnected &&
           lastClassroomDataTime != null &&
-          DateTime.now().difference(lastClassroomDataTime!).inSeconds <= 7;
+          DateTime.now().difference(lastClassroomDataTime!).inSeconds <= 15;
       if (isClassroomDeviceOnline != shouldBeOnline) {
         isClassroomDeviceOnline = shouldBeOnline;
         notifyListeners();
@@ -160,50 +167,78 @@ class DeviceProvider extends ChangeNotifier {
       return;
     }
 
+    dynamic value;
+    Map<String, dynamic>? jsonData;
+
     try {
-      final data = jsonDecode(payload);
-      dynamic value = data['value'];
-
-      // Handle ESP32 Smart Classroom Specific Topics
-      if (topic == 'tele/classroom_temp/status') {
-        classroomTemp = (value is num) ? value.toDouble() : double.tryParse(value.toString()) ?? classroomTemp;
-        notifyListeners();
-        return;
-      } else if (topic == 'tele/classroom_humi/status') {
-        classroomHumi = (value is num) ? value.toDouble() : double.tryParse(value.toString()) ?? classroomHumi;
-        notifyListeners();
-        return;
-      } else if (topic == 'tele/classroom_light/status') {
-        final rawVal = data['raw'] != null ? " (${data['raw']})" : "";
-        classroomLightStatus = "${value?.toString() ?? ''}$rawVal";
-        notifyListeners();
-        return;
-      } else if (topic == 'tele/classroom_mode/status') {
-        classroomMode = value?.toString().toUpperCase() ?? classroomMode;
-        notifyListeners();
-        return;
-      } else if (topic == 'tele/classroom_led/status') {
-        classroomLedState = (value.toString().toUpperCase() == "ON");
-        notifyListeners();
-        return;
-      } else if (topic == 'tele/classroom_fan/status') {
-        classroomFanState = (value.toString().toUpperCase() == "ON");
-        notifyListeners();
-        return;
-      } else if (topic == 'tele/classroom_door/status') {
-        classroomDoorAngle = (value is num) ? value.toDouble() : double.tryParse(value.toString()) ?? 0;
-        classroomDoorState = classroomDoorAngle > 0;
-        notifyListeners();
-        return;
-      } else if (topic == 'tele/classroom_rfid/status') {
-        final rfidUid = data['uid']?.toString() ?? '';
-        if (rfidUid.isNotEmpty && studentProvider != null) {
-          studentProvider!.handleRFIDScanned(rfidUid);
-        }
-        notifyListeners();
-        return;
+      final decoded = jsonDecode(payload);
+      if (decoded is Map<String, dynamic>) {
+        jsonData = decoded;
+        value = decoded['value'] ?? decoded['val'] ?? decoded['data'] ?? decoded['uid'];
+      } else {
+        value = decoded;
       }
+    } catch (_) {
+      value = payload.trim();
+    }
+    value ??= payload.trim();
 
+    // Handle ESP32 Smart Classroom Specific Topics
+    if (topic == 'tele/classroom_temp/status') {
+      final parsed = (value is num) ? value.toDouble() : double.tryParse(value.toString());
+      if (parsed != null) {
+        classroomTemp = parsed;
+        notifyListeners();
+      }
+      return;
+    } else if (topic == 'tele/classroom_humi/status') {
+      final parsed = (value is num) ? value.toDouble() : double.tryParse(value.toString());
+      if (parsed != null) {
+        classroomHumi = parsed;
+        notifyListeners();
+      }
+      return;
+    } else if (topic == 'tele/classroom_light/status') {
+      final str = value.toString().trim();
+      if (str == 'Tot' || str.toUpperCase() == 'LOW' || str == '0' || str.toUpperCase() == 'SÁNG') {
+        classroomLightStatus = 'Tốt ☀️';
+      } else if (str == 'Yeu' || str.toUpperCase() == 'HIGH' || str == '1' || str.toUpperCase() == 'TỐI') {
+        classroomLightStatus = 'Yếu 🌙';
+      } else {
+        classroomLightStatus = str;
+      }
+      notifyListeners();
+      return;
+    } else if (topic == 'tele/classroom_mode/status') {
+      classroomMode = value.toString().toUpperCase().contains('MANUAL') ? 'MANUAL' : 'AUTO';
+      notifyListeners();
+      return;
+    } else if (topic == 'tele/classroom_led/status') {
+      classroomLedState = (value.toString().toUpperCase() == 'ON' || value.toString() == '1');
+      notifyListeners();
+      return;
+    } else if (topic == 'tele/classroom_fan/status') {
+      classroomFanState = (value.toString().toUpperCase() == 'ON' || value.toString() == '1');
+      notifyListeners();
+      return;
+    } else if (topic == 'tele/classroom_door/status') {
+      final angle = (value is num) ? value.toDouble() : double.tryParse(value.toString()) ?? 0;
+      classroomDoorAngle = angle;
+      classroomDoorState = angle > 0 || value.toString().toUpperCase() == 'ON' || value.toString().toUpperCase() == 'OPEN';
+      notifyListeners();
+      return;
+    } else if (topic == 'tele/classroom_rfid/status') {
+      final rfidUid = (jsonData != null && jsonData['uid'] != null)
+          ? jsonData['uid'].toString()
+          : value.toString();
+      if (rfidUid.isNotEmpty && rfidUid != 'online' && studentProvider != null) {
+        studentProvider!.handleRFIDScanned(rfidUid);
+      }
+      notifyListeners();
+      return;
+    }
+
+    try {
       for (int i = 0; i < _nodes.length; i++) {
         final node = _nodes[i];
         if (node.chipId.isNotEmpty && topic.contains(node.chipId)) {

@@ -34,6 +34,7 @@ class MqttService extends ChangeNotifier {
 
     _client = MqttServerClient.withPort(brokerHost, clientId, port);
     _client!.useWebSocket = true;
+    _client!.secure = true;
     _client!.websocketProtocols = MqttClientConstants.protocolsSingleDefault;
 
     _client!.logging(on: false);

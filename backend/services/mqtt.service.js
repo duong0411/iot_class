@@ -18,6 +18,7 @@ class MqttService {
       { id: 'sched_morning', hour: 7, minute: 45, prompt: 'Đã đến giờ truy bài, các bạn học sinh chuẩn bị vào lớp!', enabled: true, action: 'NONE', lastTriggeredDay: -1 },
       { id: 'sched_evening', hour: 17, minute: 0, prompt: 'Đã đến giờ tan học, các bạn học sinh có thể ra về!', enabled: true, action: 'NONE', lastTriggeredDay: -1 }
     ];
+    this.isTimerRunning = false;
   }
 
   async connect() {
@@ -33,8 +34,9 @@ class MqttService {
     });
 
     this.client.on('connect', () => {
-      console.log('✅ Backend Lớp Học Thông Minh đã kết nối MQTT thành công!');
+      console.log('✅ Backend Lớp Học Thông Minh đã kết nối MQTT (mqtt.aiotlearninghub.com) thành công!');
       this.subscribeClassroomTopics();
+      this.startScheduleTimer();
     });
 
     this.client.on('error', (err) => {
@@ -42,25 +44,6 @@ class MqttService {
     });
 
     this.client.on('message', this.handleMessage.bind(this));
-
-    // Cầu nối phụ tới Xiaozhi Cloud Broker (mqtt.xiaozhi.me)
-    try {
-      console.log('🌉 Đang khởi tạo Cầu nối MQTT sang Xiaozhi Cloud...');
-      this.xiaozhiClient = mqtt.connect('mqtts://mqtt.xiaozhi.me:8883', {
-        clientId: `backend_xiaozhi_bridge_${Math.random().toString(16).slice(2, 8)}`,
-        keepalive: 60,
-        reconnectPeriod: 5000,
-        rejectUnauthorized: false
-      });
-
-      this.xiaozhiClient.on('connect', () => {
-        console.log('✅ Cầu nối MQTT sang Xiaozhi Cloud (mqtt.xiaozhi.me:8883) đã kết nối thành công!');
-      });
-
-      this.xiaozhiClient.on('error', (err) => {
-        // Suppress warning
-      });
-    } catch (_) {}
   }
 
   subscribeClassroomTopics() {
@@ -97,6 +80,57 @@ class MqttService {
     }
   }
 
+  startScheduleTimer() {
+    if (this.isTimerRunning) return;
+    this.isTimerRunning = true;
+    console.log('⏱️ [Backend Automation] Timer kiểm tra lịch tự động đã khởi chạy!');
+
+    setInterval(() => {
+      if (!this.schedules || this.schedules.length === 0) return;
+
+      const now = new Date();
+      // Múi giờ Việt Nam (UTC+7)
+      const vnTimeStr = now.toLocaleString("en-US", { timeZone: "Asia/Ho_Chi_Minh" });
+      const vnDate = new Date(vnTimeStr);
+      const currentHour = vnDate.getHours();
+      const currentMinute = vnDate.getMinutes();
+      const currentSecond = vnDate.getSeconds();
+      const currentDay = vnDate.getDate();
+
+      if (currentSecond === 0) {
+        for (const s of this.schedules) {
+          if (s.enabled && s.hour === currentHour && s.minute === currentMinute && s.lastTriggeredDay !== currentDay) {
+            s.lastTriggeredDay = currentDay;
+            console.log(`⏰ [AUTOMATION TRIGGER] Đã đến giờ ${s.hour}:${s.minute}! Phát lời dẫn: "${s.prompt}"`);
+
+            const ttsPayload = JSON.stringify({
+              prompt: s.prompt,
+              text: s.prompt,
+              audio_url: s.audioUrl || `${process.env.SERVER_BASE_URL || 'http://localhost:3001'}/audio/${s.id}.mp3`,
+              say: true
+            });
+
+            // 1. Phát trực tiếp qua Topic MQTT cmnd/xiaozhi_tts/say tới Loa Xiaozhi ESP32
+            this.publish('cmnd/xiaozhi_tts/say', ttsPayload);
+
+            // 2. Tự động bật/tắt thiết bị nếu là mốc giờ học / tan học
+            if (s.hour === 7 && s.minute === 45) {
+              try {
+                const XiaoZhiService = require('./xiaozhi.service');
+                XiaoZhiService.runMcpToolLocal('control_all_devices', { state: 'ON' });
+              } catch (_) {}
+            } else if (s.hour === 17 && s.minute === 0) {
+              try {
+                const XiaoZhiService = require('./xiaozhi.service');
+                XiaoZhiService.runMcpToolLocal('control_all_devices', { state: 'OFF' });
+              } catch (_) {}
+            }
+          }
+        }
+      }
+    }, 1000);
+  }
+
   async handleMessage(topic, message) {
     const payloadBuffer = Buffer.isBuffer(message) ? message : Buffer.from(message);
     let payloadStr = payloadBuffer.toString('utf8').trim();
@@ -105,56 +139,47 @@ class MqttService {
       console.log(`📥 [Schedule Set Received] Topic '${topic}' (${payloadBuffer.length} bytes): ${payloadStr}`);
       try {
         const jsonMatch = payloadStr.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) {
-          console.error('❌ [Schedule Set Error] No JSON braces found in payload.');
-          return;
-        }
-        // Strip invalid unescaped JSON control characters (0x00-0x1F) from string literal
+        if (!jsonMatch) return;
+
         const sanitizedJsonStr = jsonMatch[0].replace(/[\x00-\x1F]/g, ' ');
         const json = JSON.parse(sanitizedJsonStr);
 
         if (json.schedules && Array.isArray(json.schedules)) {
           const ttsService = require('./tts.service');
-          const updatedSchedules = [];
+          const serverBaseUrl = process.env.SERVER_BASE_URL || 'http://localhost:3001';
 
-          for (const s of json.schedules) {
-            let promptText = (s.prompt || '').trim();
-            const schId = s.id || `sched_${s.hour}_${s.minute}`;
-            const audioFileName = await ttsService.generateVietnameseTts(schId, promptText);
-
-            const baseUrl = process.env.SERVER_BASE_URL || 'http://mqtt.aiotlearninghub.com:3000';
-            const audioUrl = audioFileName ? `${baseUrl}/audio/${audioFileName}` : null;
-
-            console.log(`🎙️ [Backend TTS] Schedule '${schId}' (${s.hour}:${s.minute}) -> Audio URL: ${audioUrl}`);
-
-            updatedSchedules.push({
+          this.schedules = json.schedules.map(s => {
+            const promptStr = (s.prompt || '').trim();
+            const schedId = s.id || `sched_${Date.now()}`;
+            // Async generate TTS mp3
+            if (promptStr) {
+              ttsService.generateVietnameseTts(schedId, promptStr).then(filename => {
+                if (filename) {
+                  console.log(`🎙️ [TTS Service] Pre-generated MP3 file: ${filename} for schedule: ${schedId}`);
+                }
+              });
+            }
+            return {
               ...s,
-              prompt: promptText,
-              audio_url: audioUrl,
+              id: schedId,
+              prompt: promptStr,
+              audioUrl: `${serverBaseUrl}/audio/${schedId}.mp3`,
               lastTriggeredDay: -1
-            });
-          }
+            };
+          });
 
-          this.schedules = updatedSchedules;
-          console.log(`⏰ [Backend Schedule Update] Cập nhật ${this.schedules.length} mốc lịch tự động với Offline Audio URL!`);
+          console.log(`⏰ [Backend Schedule Update] Cập nhật ${this.schedules.length} mốc lịch tự động từ Mobile App!`);
 
-          const enrichedPayload = JSON.stringify({ schedules: this.schedules });
-
-          // Publish back to mqtt.aiotlearninghub.com
+          const broadcastPayload = JSON.stringify({ schedules: this.schedules });
           if (this.client && this.client.connected) {
-            this.client.publish('cmnd/classroom_schedule/set', enrichedPayload);
-            console.log(`📡 [Backend TX] Đã publish enriched schedule với audio_url lên mqtt.aiotlearninghub.com!`);
+            this.client.publish('stat/classroom_schedule/list', broadcastPayload);
+            console.log(`📡 [Backend TX] Đã broadcast danh sách lịch mới tới stat/classroom_schedule/list!`);
           }
 
-          // Forward to Xiaozhi Cloud broker
-          if (this.xiaozhiClient && this.xiaozhiClient.connected) {
-            this.xiaozhiClient.publish('cmnd/classroom_schedule/set', enrichedPayload);
-            console.log(`🌉 [Backend Bridge] Đã forward cmnd/classroom_schedule/set với audio_url sang Xiaozhi ESP32 qua mqtt.xiaozhi.me!`);
-          }
           return;
         }
       } catch (err) {
-        console.error('❌ [Schedule Set Error] Failed to parse and process schedule JSON:', err.message);
+        console.error('❌ [Schedule Set Error] Failed to parse schedule JSON:', err.message);
         return;
       }
     }
@@ -170,14 +195,6 @@ class MqttService {
       }
     } catch (e) {
       valStr = payloadStr;
-    }
-
-    // Forward tin nhắn khác từ Mobile App sang Xiaozhi ESP32
-    if (this.xiaozhiClient && this.xiaozhiClient.connected) {
-      if (topic === 'cmnd/classroom_schedule/delete' || topic === 'cmnd/xiaozhi_tts/say') {
-        this.xiaozhiClient.publish(topic, payloadStr);
-        console.log(`🌉 [Backend Bridge] Đã forward ${topic} sang Xiaozhi ESP32 qua mqtt.xiaozhi.me!`);
-      }
     }
 
     // --- Cập nhật Cache Telemetry Lớp Học cho XiaoZhi MCP ---

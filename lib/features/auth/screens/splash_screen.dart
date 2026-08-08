@@ -22,18 +22,18 @@ class _SplashScreenState extends State<SplashScreen> {
   }
 
   Future<void> _navigate() async {
-    // Chờ 2.5s để hiện Splash Screen đẹp mắt
-    await Future.delayed(const Duration(milliseconds: 2500));
+    // Chờ 1.5s để hiện Splash Screen đẹp mắt
+    await Future.delayed(const Duration(milliseconds: 1500));
     if (!mounted) return;
 
-    // Kiểm tra trạng thái đăng nhập
+    // Tự động vào thẳng HomeScreen không qua màn hình Đăng Nhập
     final authProvider = context.read<AuthProvider>();
-    final isLoggedIn = await authProvider.checkAuthStatus();
+    await authProvider.checkAuthStatus();
 
     if (mounted) {
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
-          pageBuilder: (_, __, ___) => isLoggedIn ? const HomeScreen() : const LoginScreen(),
+          pageBuilder: (_, __, ___) => const HomeScreen(),
           transitionDuration: const Duration(milliseconds: 800),
           transitionsBuilder: (_, animation, __, child) =>
               FadeTransition(opacity: animation, child: child),

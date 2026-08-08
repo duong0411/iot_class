@@ -1,6 +1,6 @@
-const googleTTS = require('google-tts-api');
 const fs = require('fs');
 const path = require('path');
+const https = require('https');
 
 class TtsService {
   constructor() {
@@ -27,16 +27,32 @@ class TtsService {
 
       console.log(`🎙️ [TTS Generator] Generating Vietnamese audio for prompt: "${cleanPrompt}"...`);
       
-      const base64Audio = await googleTTS.getAudioBase64(cleanPrompt, {
-        lang: 'vi',
-        slow: false,
-        host: 'https://translate.google.com',
-        timeout: 10000,
+      const encodedText = encodeURIComponent(cleanPrompt);
+      const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodedText}&tl=vi&client=tw-ob`;
+
+      await new Promise((resolve, reject) => {
+        const fileStream = fs.createWriteStream(filePath);
+        https.get(url, {
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          }
+        }, (res) => {
+          if (res.statusCode !== 200) {
+            return reject(new Error(`Google TTS status code: ${res.statusCode}`));
+          }
+          res.pipe(fileStream);
+          fileStream.on('finish', () => {
+            fileStream.close();
+            resolve();
+          });
+        }).on('error', (err) => {
+          fs.unlink(filePath, () => {});
+          reject(err);
+        });
       });
 
-      const buffer = Buffer.from(base64Audio, 'base64');
-      fs.writeFileSync(filePath, buffer);
-      console.log(`✅ [TTS Generator] Saved audio file to: ${filePath} (${buffer.length} bytes)`);
+      const stats = fs.statSync(filePath);
+      console.log(`✅ [TTS Generator] Saved audio file to: ${filePath} (${stats.size} bytes)`);
 
       return filename;
     } catch (error) {

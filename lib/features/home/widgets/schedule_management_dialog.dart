@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -83,11 +84,12 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
     }
   }
 
-  void _saveAndPublish(BuildContext context) {
-    _saveSchedules();
+  Future<void> _saveAndPublish(BuildContext context) async {
+    await _saveSchedules();
     final mqttService = _getMqttService(context);
     if (mqttService != null) {
       final jsonList = _schedules.map((e) => e.toJson()).toList();
+      if (kDebugMode) print('Publishing ${jsonList.length} schedules to MQTT...');
       mqttService.publishScheduleSet(jsonList);
     }
   }
@@ -247,12 +249,22 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () {
-                      _saveAndPublish(context);
+                    onPressed: () async {
+                      // Ensure MQTT is connected before publishing
+                      final mqttSvc = _getMqttService(context);
+                      if (mqttSvc != null && !mqttSvc.isConnected) {
+                        if (kDebugMode) print('[Schedule] MQTT not connected, reconnecting...');
+                        await mqttSvc.connect();
+                      }
+                      await _saveAndPublish(context);
+                      // Small delay to ensure MQTT message is sent
+                      await Future.delayed(const Duration(milliseconds: 300));
+                      if (!context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
                           content: Text('✅ Đã lưu và gửi toàn bộ Lịch tự động qua MQTT!'),
                           backgroundColor: Colors.green,
+                          duration: Duration(seconds: 2),
                         ),
                       );
                       Navigator.pop(context);
