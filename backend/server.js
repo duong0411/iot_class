@@ -9,6 +9,7 @@ require('./config/firebase');
 const authRoutes = require('./routes/auth.routes');
 const nodeRoutes = require('./routes/node.routes');
 const ttsRoutes = require('./routes/tts.routes');
+const scheduleAudioRoutes = require('./routes/schedule_audio.routes');
 const MqttService = require('./services/mqtt.service');
 const XiaoZhiService = require('./services/xiaozhi.service');
 
@@ -18,7 +19,7 @@ const app = express();
 
 // Middleware
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use('/audio', express.static(path.join(__dirname, 'public/audio')));
 
@@ -44,9 +45,19 @@ app.use('/api/auth', authRoutes);
 // app.use('/api/devices', deviceRoutes); 
 app.use('/api/nodes', nodeRoutes);
 app.use('/api/tts', ttsRoutes);
+app.use('/api/schedule/audio', scheduleAudioRoutes);
 
 // HTTP Endpoint phục vụ Xiaozhi ESP32 gọi trực tiếp tải danh sách Lịch & MP3 Voice URL (Không qua MQTT)
 let httpSchedules = [];
+
+function resolveScheduleAudio(s, serverBaseUrl) {
+  const audioSource = (s.audioSource || s.audio_source || 'tts').toString().toLowerCase();
+  const existing =
+    s.audioUrl || s.audio_url || '';
+  const filename = `voice_${s.hour ?? 0}h${s.minute ?? 0}.mp3`;
+
+  return { audioSource, existing, filename };
+}
 
 app.get('/api/schedule', (req, res) => {
   const mqttService = require('./services/mqtt.service');
@@ -58,16 +69,47 @@ app.post('/api/schedule', async (req, res) => {
   const { schedules } = req.body;
   if (Array.isArray(schedules)) {
     const ttsService = require('./services/tts.service');
+    const youtubeService = require('./services/youtube.service');
     const serverBaseUrl = process.env.SERVER_BASE_URL || 'https://duynguyen.io.vn';
 
     httpSchedules = await Promise.all(schedules.map(async s => {
-      const filename = `voice_${s.hour ?? 0}h${s.minute ?? 0}.mp3`;
-      if (s.prompt) {
-        await ttsService.generateVietnameseTts(filename, s.prompt);
+      const { audioSource, existing, filename } = resolveScheduleAudio(s, serverBaseUrl);
+      let audioUrl = existing;
+      let youtubeUrl = s.youtubeUrl || s.youtube_url || '';
+
+      try {
+        if (audioSource === 'youtube' && youtubeUrl) {
+          // Prefer already-prepared file if client uploaded/processed URL.
+          if (!audioUrl || audioUrl.includes('youtube.com')) {
+            const saved = await youtubeService.downloadAsMp3(
+              youtubeUrl,
+              filename.replace('.mp3', '_yt.mp3')
+            );
+            audioUrl = `${serverBaseUrl}/audio/${saved}`;
+          }
+        } else if (audioSource === 'mp3' && audioUrl) {
+          // Keep uploaded MP3 URL as-is.
+        } else if (s.prompt) {
+          await ttsService.generateVietnameseTts(filename, s.prompt);
+          audioUrl = `${serverBaseUrl}/audio/${filename}`;
+        } else if (!audioUrl) {
+          audioUrl = `${serverBaseUrl}/audio/${filename}`;
+        }
+      } catch (e) {
+        console.error(`❌ [Schedule] audio prepare failed for ${s.id}:`, e.message);
+        if (!audioUrl && s.prompt) {
+          await ttsService.generateVietnameseTts(filename, s.prompt);
+          audioUrl = `${serverBaseUrl}/audio/${filename}`;
+        }
       }
+
       return {
         ...s,
-        audio_url: `${serverBaseUrl}/audio/${filename}`
+        audioSource,
+        youtubeUrl: youtubeUrl || undefined,
+        audioUrl,
+        audio_url: audioUrl,
+        lastTriggeredDay: s.lastTriggeredDay ?? -1
       };
     }));
 
@@ -127,8 +169,11 @@ app.use((err, req, res, next) => {
   res.status(500).json({ success: false, message: 'Lỗi server nội bộ' });
 });
 
+const websocketService = require('./services/websocket.service');
+
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, '0.0.0.0', () => {
+const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 AloT Smart Classroom Backend đang chạy tại http://0.0.0.0:${PORT}`);
-  console.log(`📱 Flutter app kết nối tới Backend & XiaoZhi MCP Server qua MQTT WSS!`);
+  console.log(`📱 Flutter app & Xiaozhi ESP32 kết nối tới WebSocket Streamer tại ws://0.0.0.0:${PORT}/ws`);
+  websocketService.init(server);
 });

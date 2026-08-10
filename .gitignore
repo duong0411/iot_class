@@ -14,6 +14,8 @@ build/
 data_crawl/
 data_crawl.zip
 *.zip
+*.rar
+backend/xiaozhi-esp32.rar
 
 # Env & secrets
 .env

@@ -153,30 +153,48 @@ class MqttService {
 
         if (json.schedules && Array.isArray(json.schedules)) {
           const ttsService = require('./tts.service');
-          const serverBaseUrl = process.env.SERVER_BASE_URL || 'http://localhost:3001';
+          const youtubeService = require('./youtube.service');
+          const serverBaseUrl = process.env.SERVER_BASE_URL || 'https://duynguyen.io.vn';
 
-          this.schedules = json.schedules.map(s => {
+          this.schedules = await Promise.all(json.schedules.map(async s => {
             const promptStr = (s.prompt || '').trim();
             const schedId = s.id || `sched_${s.hour ?? 0}h${s.minute ?? 0}`;
-            // Đặt tên file định danh chuẩn theo mốc giờ của lịch (vd: voice_14h52.mp3)
-            // Đảm bảo mỗi mốc lịch chỉ lưu DUY NHẤT 1 file voice, không bị đẻ thêm file rác
             const filename = `voice_${s.hour ?? 0}h${s.minute ?? 0}.mp3`;
+            const audioSource = (s.audioSource || s.audio_source || 'tts').toString().toLowerCase();
+            let audioUrl = s.audioUrl || s.audio_url || '';
+            const youtubeUrl = s.youtubeUrl || s.youtube_url || '';
 
-            if (promptStr) {
-              ttsService.generateVietnameseTts(filename, promptStr).then(resFile => {
-                if (resFile) {
-                  console.log(`🎙️ [TTS Service] Generated MP3 voice for schedule: ${filename}`);
-                }
-              });
+            try {
+              if (audioSource === 'youtube' && youtubeUrl && !audioUrl) {
+                const saved = await youtubeService.downloadAsMp3(youtubeUrl, filename.replace('.mp3', '_yt.mp3'));
+                audioUrl = `${serverBaseUrl}/audio/${saved}`;
+              } else if (audioSource === 'mp3' && audioUrl) {
+                // keep
+              } else if (promptStr) {
+                await ttsService.generateVietnameseTts(filename, promptStr);
+                audioUrl = `${serverBaseUrl}/audio/${filename}`;
+              } else if (!audioUrl) {
+                audioUrl = `${serverBaseUrl}/audio/${filename}`;
+              }
+            } catch (e) {
+              console.error(`❌ [Schedule MQTT] audio prepare failed:`, e.message);
+              if (promptStr) {
+                await ttsService.generateVietnameseTts(filename, promptStr);
+                audioUrl = `${serverBaseUrl}/audio/${filename}`;
+              }
             }
+
             return {
               ...s,
               id: schedId,
               prompt: promptStr,
-              audioUrl: `${serverBaseUrl}/audio/${filename}`,
+              audioSource,
+              youtubeUrl: youtubeUrl || undefined,
+              audioUrl,
+              audio_url: audioUrl,
               lastTriggeredDay: -1
             };
-          });
+          }));
 
           console.log(`⏰ [Backend Schedule Update] Cập nhật ${this.schedules.length} mốc lịch tự động từ Mobile App!`);
 

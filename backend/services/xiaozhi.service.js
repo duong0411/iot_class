@@ -10,46 +10,124 @@ class XiaoZhiService {
     this.reconnectTimeout = null;
     this.pingInterval = null;
     this.schedulerInterval = null;
+    this.reconnectAttempt = 0;
+    this.intentionalClose = false;
+    this.connecting = false;
+    this.lastPongAt = 0;
   }
 
   connect() {
+    if (this.connecting) {
+      return;
+    }
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+      console.log('ℹ️ XiaoZhi MCP đã kết nối / đang kết nối, bỏ qua connect() trùng.');
+      return;
+    }
+
+    this.cleanupSocket();
+    this.intentionalClose = false;
+    this.connecting = true;
+
     console.log(`🤖 Đang kết nối tới XiaoZhi MCP Server (Smart Classroom)...`);
-    this.ws = new WebSocket(XIAOZHI_URL);
+    this.ws = new WebSocket(XIAOZHI_URL, {
+      handshakeTimeout: 15000,
+      perMessageDeflate: false,
+    });
 
     this.ws.on('open', () => {
+      this.connecting = false;
+      this.reconnectAttempt = 0;
+      this.lastPongAt = Date.now();
       console.log('✅ XiaoZhi MCP cho Lớp Học Thông Minh đã kết nối thành công!');
 
-      // Giữ kết nối Ping/Pong định kỳ (25 giây)
       if (this.pingInterval) clearInterval(this.pingInterval);
+      // WS ping giữ NAT/proxy sống; cloud Xiaozhi cũng hay idle-timeout ~60–90s.
       this.pingInterval = setInterval(() => {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          this.ws.ping();
-        }
-      }, 25000);
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
-      // Khởi chạy Bộ Lịch Tự Động từ Mobile App qua MQTT
+        // Nếu quá 70s không nhận pong → socket zombie, cắt để reconnect.
+        if (this.lastPongAt && Date.now() - this.lastPongAt > 70000) {
+          console.warn('⚠️ XiaoZhi MCP không trả pong >70s, terminate để kết nối lại...');
+          try { this.ws.terminate(); } catch (_) {}
+          return;
+        }
+
+        try {
+          this.ws.ping();
+        } catch (e) {
+          console.error('❌ Lỗi WS ping:', e.message);
+        }
+      }, 20000);
+
       this.startClassroomScheduler();
     });
 
-    this.ws.on('message', (data) => {
-      const messageStr = data.toString();
-      this.handleJsonRpc(messageStr);
+    this.ws.on('pong', () => {
+      this.lastPongAt = Date.now();
     });
 
-    this.ws.on('close', () => {
-      if (this.pingInterval) clearInterval(this.pingInterval);
-      console.log('❌ XiaoZhi MCP ngắt kết nối. Đang thử lại sau 5s...');
+    this.ws.on('message', (data) => {
+      this.lastPongAt = Date.now();
+      this.handleJsonRpc(data.toString());
+    });
+
+    this.ws.on('close', (code, reasonBuf) => {
+      this.connecting = false;
+      if (this.pingInterval) {
+        clearInterval(this.pingInterval);
+        this.pingInterval = null;
+      }
+
+      const reason = reasonBuf ? reasonBuf.toString() : '';
+      console.log(`❌ XiaoZhi MCP ngắt kết nối (code=${code}, reason=${reason || 'n/a'}).`);
+
+      if (this.intentionalClose) {
+        console.log('ℹ️ Đóng MCP chủ động — không reconnect.');
+        return;
+      }
+
       this.scheduleReconnect();
     });
 
     this.ws.on('error', (err) => {
+      this.connecting = false;
       console.error('❌ Lỗi XiaoZhi WS:', err.message);
     });
   }
 
+  cleanupSocket() {
+    if (this.pingInterval) {
+      clearInterval(this.pingInterval);
+      this.pingInterval = null;
+    }
+    if (this.ws) {
+      try {
+        this.ws.removeAllListeners();
+        if (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING) {
+          this.ws.terminate();
+        }
+      } catch (_) {}
+      this.ws = null;
+    }
+  }
+
   scheduleReconnect() {
     if (this.reconnectTimeout) clearTimeout(this.reconnectTimeout);
-    this.reconnectTimeout = setTimeout(() => this.connect(), 5000);
+    this.reconnectAttempt += 1;
+    // 5s, 10s, 20s... tối đa 60s — tránh spam khi cloud kick liên tục.
+    const delay = Math.min(60000, 5000 * Math.pow(2, Math.min(this.reconnectAttempt - 1, 3)));
+    console.log(`🔁 Thử kết nối lại MCP sau ${Math.round(delay / 1000)}s (lần ${this.reconnectAttempt})...`);
+    this.reconnectTimeout = setTimeout(() => this.connect(), delay);
+  }
+
+  disconnect() {
+    this.intentionalClose = true;
+    if (this.reconnectTimeout) {
+      clearTimeout(this.reconnectTimeout);
+      this.reconnectTimeout = null;
+    }
+    this.cleanupSocket();
   }
 
   // BỘ LỊCH TỰ ĐỘNG ĐỘNG (Nhận dữ liệu từ Mobile App qua MQTT aiotlearninghub)
@@ -143,6 +221,72 @@ class XiaoZhiService {
     }
   }
 
+  getTools() {
+    return [
+      {
+        name: "control_light",
+        description: "Điều khiển bật (ON) hoặc tắt (OFF) đèn chiếu sáng trong lớp học thông minh.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            state: { type: "string", enum: ["ON", "OFF"], description: "ON để bật đèn, OFF để tắt đèn" }
+          },
+          required: ["state"]
+        }
+      },
+      {
+        name: "control_fan",
+        description: "Điều khiển bật (ON) hoặc tắt (OFF) quạt làm mát trong lớp học thông minh.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            state: { type: "string", enum: ["ON", "OFF"], description: "ON để bật quạt, OFF để tắt quạt" }
+          },
+          required: ["state"]
+        }
+      },
+      {
+        name: "control_door",
+        description: "Điều khiển mở cửa (open / 90 độ), đóng cửa (close / 0 độ) hoặc quay góc tùy chọn.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            mode: { type: "string", enum: ["open", "close", "angle"], description: "open: mở 90 độ | close: đóng 0 độ | angle: góc tùy chọn" },
+            angle: { type: "integer", minimum: 0, maximum: 180, description: "Góc quay servo từ 0 đến 180 độ" }
+          },
+          required: ["mode"]
+        }
+      },
+      {
+        name: "set_classroom_mode",
+        description: "Cài đặt chế độ hoạt động cho lớp học: AUTO (Tự động bật/tắt thiết bị theo cảm biến) hoặc MANUAL (Điều khiển thủ công).",
+        inputSchema: {
+          type: "object",
+          properties: {
+            mode: { type: "string", enum: ["AUTO", "MANUAL"], description: "AUTO: Tự động cảm biến | MANUAL: Điều khiển thủ công" }
+          },
+          required: ["mode"]
+        }
+      },
+      {
+        name: "read_environment",
+        description: "Báo cáo đầy đủ thông số môi trường của lớp học thông minh bao gồm: Nhiệt độ, Độ ẩm, Cảm biến ánh sáng (Tốt/Yếu), trạng thái Quạt, Đèn, Cửa lớp và Chế độ hoạt động hiện tại.",
+        inputSchema: { type: "object", properties: {} }
+      },
+      {
+        name: "control_all_devices",
+        description: "Bật (ON) hoặc Tắt (OFF) toàn bộ các thiết bị (bao gồm tất cả đèn và quạt) trong lớp học thông minh.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            state: { type: "string", enum: ["ON", "OFF"], description: "ON để bật tất cả, OFF để tắt toàn bộ thiết bị lớp học" }
+          },
+          required: ["state"]
+        }
+      }
+    ];
+  }
+
   handleJsonRpc(jsonString) {
     let doc;
     try {
@@ -151,7 +295,16 @@ class XiaoZhiService {
       return;
     }
 
-    if (!doc || !doc.method) return;
+    if (!doc || typeof doc !== 'object') return;
+
+    // Response / error từ phía cloud — không cần trả lời.
+    if (doc.result !== undefined || doc.error !== undefined) {
+      return;
+    }
+
+    if (!doc.method) return;
+
+    const hasId = doc.id !== undefined && doc.id !== null;
 
     if (doc.method === 'initialize') {
       this.send({
@@ -159,90 +312,45 @@ class XiaoZhiService {
         id: doc.id,
         result: {
           protocolVersion: "2024-11-05",
-          capabilities: { tools: {} },
+          capabilities: {
+            tools: { listChanged: false }
+          },
           serverInfo: { name: "AloT Smart Classroom Server", version: "2.0.0" }
         }
       });
       console.log(`[XiaoZhi MCP] Trả lời initialize thành công!`);
-    } 
-    else if (doc.method === 'notifications/initialized') {
-      console.log(`[XiaoZhi MCP] Đã nhận notifications/initialized từ XiaoZhi Client.`);
+      return;
     }
-    else if (doc.method === 'tools/list') {
+
+    if (doc.method === 'notifications/initialized' || doc.method === 'notifications/cancelled') {
+      console.log(`[XiaoZhi MCP] Nhận ${doc.method}`);
+      return;
+    }
+
+    // JSON-RPC ping — bắt buộc trả lời, không trả thì cloud cắt socket.
+    if (doc.method === 'ping') {
+      if (hasId) {
+        this.send({ jsonrpc: "2.0", id: doc.id, result: {} });
+      }
+      return;
+    }
+
+    if (doc.method === 'tools/list') {
       this.send({
         jsonrpc: "2.0",
         id: doc.id,
         result: {
-          tools: [
-            {
-              name: "control_light",
-              description: "Điều khiển bật (ON) hoặc tắt (OFF) đèn chiếu sáng trong lớp học thông minh.",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  state: { type: "string", enum: ["ON", "OFF"], description: "ON để bật đèn, OFF để tắt đèn" }
-                },
-                required: ["state"]
-              }
-            },
-            {
-              name: "control_fan",
-              description: "Điều khiển bật (ON) hoặc tắt (OFF) quạt làm mát trong lớp học thông minh.",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  state: { type: "string", enum: ["ON", "OFF"], description: "ON để bật quạt, OFF để tắt quạt" }
-                },
-                required: ["state"]
-              }
-            },
-            {
-              name: "control_door",
-              description: "Điều khiển mở cửa (open / 90 độ), đóng cửa (close / 0 độ) hoặc quay góc tùy chọn.",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  mode: { type: "string", enum: ["open", "close", "angle"], description: "open: mở 90 độ | close: đóng 0 độ | angle: góc tùy chọn" },
-                  angle: { type: "integer", minimum: 0, maximum: 180, description: "Góc quay servo từ 0 đến 180 độ" }
-                },
-                required: ["mode"]
-              }
-            },
-            {
-              name: "set_classroom_mode",
-              description: "Cài đặt chế độ hoạt động cho lớp học: AUTO (Tự động bật/tắt thiết bị theo cảm biến) hoặc MANUAL (Điều khiển thủ công).",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  mode: { type: "string", enum: ["AUTO", "MANUAL"], description: "AUTO: Tự động cảm biến | MANUAL: Điều khiển thủ công" }
-                },
-                required: ["mode"]
-              }
-            },
-            {
-              name: "read_environment",
-              description: "Báo cáo đầy đủ thông số môi trường của lớp học thông minh bao gồm: Nhiệt độ, Độ ẩm, Cảm biến ánh sáng (Tốt/Yếu), trạng thái Quạt, Đèn, Cửa lớp và Chế độ hoạt động hiện tại.",
-              inputSchema: { type: "object", properties: {} }
-            },
-            {
-              name: "control_all_devices",
-              description: "Bật (ON) hoặc Tắt (OFF) toàn bộ các thiết bị (bao gồm tất cả đèn và quạt) trong lớp học thông minh.",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  state: { type: "string", enum: ["ON", "OFF"], description: "ON để bật tất cả, OFF để tắt toàn bộ thiết bị lớp học" }
-                },
-                required: ["state"]
-              }
-            }
-          ]
+          tools: this.getTools(),
+          nextCursor: ""
         }
       });
       console.log(`[XiaoZhi MCP] Đã gửi danh sách Tools cho Lớp Học Thông Minh`);
+      return;
     }
-    else if (doc.method === 'tools/call') {
-      const toolName = doc.params.name;
-      const args = doc.params.arguments || {};
+
+    if (doc.method === 'tools/call') {
+      const toolName = doc.params?.name;
+      const args = doc.params?.arguments || {};
       console.log(`🗣️ [XiaoZhi Voice MCP Call] Tool: ${toolName}`, args);
 
       const responseText = this.runMcpToolLocal(toolName, args) || 'Tool không tồn tại.';
@@ -255,6 +363,27 @@ class XiaoZhiService {
           isError: false
         }
       });
+      return;
+    }
+
+    // resources/list, prompts/list, ... — phải trả lời nếu có id, nếu không cloud timeout rồi disconnect.
+    if (hasId) {
+      console.log(`[XiaoZhi MCP] Method chưa hỗ trợ "${doc.method}" — trả empty/error để giữ kết nối.`);
+      if (doc.method === 'resources/list') {
+        this.send({ jsonrpc: "2.0", id: doc.id, result: { resources: [] } });
+      } else if (doc.method === 'prompts/list') {
+        this.send({ jsonrpc: "2.0", id: doc.id, result: { prompts: [] } });
+      } else if (doc.method === 'resources/templates/list') {
+        this.send({ jsonrpc: "2.0", id: doc.id, result: { resourceTemplates: [] } });
+      } else {
+        this.send({
+          jsonrpc: "2.0",
+          id: doc.id,
+          error: { code: -32601, message: `Method not found: ${doc.method}` }
+        });
+      }
+    } else {
+      console.log(`[XiaoZhi MCP] Bỏ qua notification: ${doc.method}`);
     }
   }
 }

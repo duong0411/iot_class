@@ -3,10 +3,11 @@ const router = express.Router();
 const ttsService = require('../services/tts.service');
 const xiaozhiService = require('../services/xiaozhi.service');
 const mqttService = require('../services/mqtt.service');
+const websocketService = require('../services/websocket.service');
 
 /**
  * @route   POST /api/tts/say
- * @desc    Tạo file TTS Tiếng Việt mới tại https://duynguyen.io.vn và phát loa Xiaozhi ESP32 qua MQTT + Cloud
+ * @desc    Tạo file TTS Tiếng Việt mới tại https://duynguyen.io.vn và phát loa Xiaozhi ESP32 qua WebSocket, MQTT + Cloud
  * @body    { "prompt": "Đề nghị học sinh nghiêm túc truy bài..." }
  */
 router.post('/say', async (req, res) => {
@@ -34,18 +35,21 @@ router.post('/say', async (req, res) => {
       say: true
     });
 
-    // 2. Gửi tín hiệu phát loa Xiaozhi qua MQTT Topic 'cmnd/xiaozhi_tts/say'
+    // 2. Stream âm thanh & thông báo trực tiếp tới Xiaozhi ESP32 qua WebSocket Server
+    await websocketService.streamTtsToEsp32(cleanPrompt, audioUrl, generatedFile);
+
+    // 3. Gửi tín hiệu phát loa Xiaozhi qua MQTT Topic 'cmnd/xiaozhi_tts/say'
     mqttService.publish('cmnd/xiaozhi_tts/say', ttsPayload);
 
-    // 3. Gửi thông báo MCP nếu có kết nối WebSocket
+    // 4. Gửi thông báo MCP nếu có kết nối WebSocket Cloud
     xiaozhiService.sendTtsSay(cleanPrompt);
 
-    console.log(`📢 [API /api/tts/say] Streamed to Xiaozhi ESP32 via MQTT & Cloud: "${cleanPrompt}"`);
+    console.log(`📢 [API /api/tts/say] Streamed to Xiaozhi ESP32 via WebSocket, MQTT & Cloud: "${cleanPrompt}"`);
     console.log(`🔗 Audio URL: ${audioUrl}`);
 
     return res.json({
       success: true,
-      message: 'Đã tạo voice Tiếng Việt và phát loa Xiaozhi thành công qua https://duynguyen.io.vn!',
+      message: 'Đã tạo voice Tiếng Việt và phát loa Xiaozhi thành công qua WebSocket & https://duynguyen.io.vn!',
       data: {
         prompt: cleanPrompt,
         audioUrl: audioUrl,
@@ -81,12 +85,13 @@ router.get('/speak', async (req, res) => {
     const baseUrl = process.env.SERVER_BASE_URL || 'https://duynguyen.io.vn';
     const audioUrl = `${baseUrl}/audio/${generatedFile}`;
 
-    // Phát thoại trực tiếp tới Xiaozhi qua Cloud WebSocket
+    // Stream âm thanh trực tiếp tới Xiaozhi qua WebSocket & Cloud
+    await websocketService.streamTtsToEsp32(cleanPrompt, audioUrl, generatedFile);
     xiaozhiService.sendTtsSay(cleanPrompt);
 
     return res.json({
       success: true,
-      message: 'Đã phát loa Xiaozhi thành công qua Cloud!',
+      message: 'Đã phát loa Xiaozhi thành công qua WebSocket & Cloud!',
       audioUrl: audioUrl
     });
   } catch (err) {

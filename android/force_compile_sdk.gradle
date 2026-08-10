@@ -1,0 +1,16 @@
+// Force compileSdk 36 for every Android library plugin (file_picker ships with 34).
+subprojects { sub ->
+    sub.pluginManager.withPlugin("com.android.library") {
+        sub.android {
+            if (compileSdkVersion != null && compileSdkVersion < 36) {
+                // older AGP
+            }
+            compileSdkVersion 36
+        }
+    }
+    sub.pluginManager.withPlugin("com.android.application") {
+        sub.android {
+            compileSdkVersion 36
+        }
+    }
+}
