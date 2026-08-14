@@ -130,11 +130,11 @@ class XiaoZhiService {
     this.cleanupSocket();
   }
 
-  // BỘ LỊCH TỰ ĐỘNG ĐỘNG (Nhận dữ liệu từ Mobile App qua MQTT aiotlearninghub)
+  // BỘ LỊCH TỰ ĐỘNG ĐỘNG (Nhận dữ liệu từ Mobile App qua MQTT mqtt.duynguyen.io.vn)
   startClassroomScheduler() {
     if (this.schedulerInterval) return;
 
-    console.log('⏰ Bộ lịch tự động Lớp học từ Mobile App (aiotlearninghub MQTT) đã kích hoạt!');
+    console.log('⏰ Bộ lịch tự động Lớp học từ Mobile App (mqtt.duynguyen.io.vn) đã kích hoạt!');
 
     this.schedulerInterval = setInterval(() => {
       const now = new Date();

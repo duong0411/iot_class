@@ -22,19 +22,22 @@ class MqttService {
   }
 
   async connect() {
-    const mqttUrl = process.env.MQTT_URL || 'wss://mqtt.aiotlearninghub.com:443/mqtt';
-    console.log(`🔌 Đang kết nối tới MQTT Broker (Classroom Backend): ${mqttUrl}`);
+    // Kết nối nội bộ tới Mosquitto local qua TCP (nhanh, không overhead TLS)
+    // ESP32/Mobile App kết nối qua ws://localhost:443 (plain WS, qua Cloudflare Tunnel thành WSS)
+    const mqttUrl = process.env.MQTT_URL || 'mqtt://localhost:1883';
+    console.log(`🔌 Đang kết nối tới MQTT Broker local: ${mqttUrl}`);
 
     this.client = mqtt.connect(mqttUrl, {
       clientId: `classroom_backend_${Math.random().toString(16).slice(2, 8)}`,
       keepalive: 60,
       reconnectPeriod: 2000,
       clean: true,
-      protocol: 'wss'
+      connectTimeout: 10000
     });
 
     this.client.on('connect', () => {
-      console.log('✅ Backend Lớp Học Thông Minh đã kết nối MQTT (mqtt.aiotlearninghub.com) thành công!');
+      console.log('✅ Backend đã kết nối Mosquitto local (localhost:1883) thành công!');
+      console.log(`📡 ESP32 kết nối qua: ws://${process.env.MQTT_PUBLIC_HOST || 'mqtt.duynguyen.io.vn'}:${process.env.MQTT_PUBLIC_PORT || 443}/mqtt`);
       this.subscribeClassroomTopics();
       this.startScheduleTimer();
     });
@@ -184,6 +187,18 @@ class MqttService {
               }
             }
 
+            let opusUrl = '';
+            try {
+              const opusService = require('./opus.service');
+              const mp3Name = opusService.filenameFromAudioUrl(audioUrl) || filename;
+              if (mp3Name && /\.mp3$/i.test(mp3Name)) {
+                const oggName = await opusService.ensureOggFromMp3(mp3Name);
+                opusUrl = `${serverBaseUrl}/audio/${oggName}`;
+              }
+            } catch (e) {
+              console.warn(`⚠️ [Schedule MQTT] Opus convert:`, e.message);
+            }
+
             return {
               ...s,
               id: schedId,
@@ -192,6 +207,8 @@ class MqttService {
               youtubeUrl: youtubeUrl || undefined,
               audioUrl,
               audio_url: audioUrl,
+              opusUrl: opusUrl || undefined,
+              opus_url: opusUrl || undefined,
               lastTriggeredDay: -1
             };
           }));

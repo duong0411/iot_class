@@ -1,9 +1,9 @@
 const mqtt = require('mqtt');
 
-const client = mqtt.connect('wss://mqtt.aiotlearninghub.com:443/mqtt');
+const client = mqtt.connect('wss://mqtt.duynguyen.io.vn:443/mqtt');
 
 client.on('connect', () => {
-  console.log('Connected to mqtt.aiotlearninghub.com for test publish...');
+  console.log('Connected to mqtt.duynguyen.io.vn for test publish...');
   const payload = JSON.stringify({
     schedules: [
       {

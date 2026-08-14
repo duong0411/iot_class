@@ -14,6 +14,7 @@ const MqttService = require('./services/mqtt.service');
 const XiaoZhiService = require('./services/xiaozhi.service');
 
 const path = require('path');
+const fs = require('fs');
 
 const app = express();
 
@@ -21,6 +22,28 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '2mb' }));
 app.use(express.urlencoded({ extended: true }));
+// On-demand MP3 → Ogg Opus for Xiaozhi (same decode path as cloud TTS)
+app.get('/audio/:file', async (req, res, next) => {
+  try {
+    const file = req.params.file || '';
+    if (!/\.ogg$/i.test(file)) return next();
+    const opusService = require('./services/opus.service');
+    const mp3Name = file.replace(/\.ogg$/i, '.mp3');
+    const mp3Path = path.join(__dirname, 'public/audio', mp3Name);
+    const oggPath = path.join(__dirname, 'public/audio', file);
+    if (!fs.existsSync(oggPath) && fs.existsSync(mp3Path)) {
+      await opusService.ensureOggFromMp3(mp3Name);
+    }
+    if (fs.existsSync(oggPath)) {
+      res.setHeader('Content-Type', 'audio/ogg');
+      return res.sendFile(oggPath);
+    }
+    return next();
+  } catch (e) {
+    console.error('❌ [audio/.ogg]', e.message);
+    return next();
+  }
+});
 app.use('/audio', express.static(path.join(__dirname, 'public/audio')));
 
 // Connect to MongoDB
@@ -103,12 +126,26 @@ app.post('/api/schedule', async (req, res) => {
         }
       }
 
+      let opusUrl = '';
+      try {
+        const opusService = require('./services/opus.service');
+        const mp3Name = opusService.filenameFromAudioUrl(audioUrl) || filename;
+        if (mp3Name && /\.mp3$/i.test(mp3Name)) {
+          const oggName = await opusService.ensureOggFromMp3(mp3Name);
+          opusUrl = `${serverBaseUrl}/audio/${oggName}`;
+        }
+      } catch (e) {
+        console.warn(`⚠️ [Schedule] Opus convert skipped for ${s.id}:`, e.message);
+      }
+
       return {
         ...s,
         audioSource,
         youtubeUrl: youtubeUrl || undefined,
         audioUrl,
         audio_url: audioUrl,
+        opusUrl: opusUrl || undefined,
+        opus_url: opusUrl || undefined,
         lastTriggeredDay: s.lastTriggeredDay ?? -1
       };
     }));

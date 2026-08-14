@@ -6,8 +6,8 @@ import 'package:mqtt_client/mqtt_server_client.dart';
 import '../models/node_model.dart';
 
 class MqttService extends ChangeNotifier {
-  static const String brokerHost = 'mqtt.aiotlearninghub.com';
-  static const String wssUrl = 'wss://mqtt.aiotlearninghub.com/mqtt';
+  static const String brokerHost = 'mqtt.duynguyen.io.vn';
+  static const String wssUrl = 'wss://mqtt.duynguyen.io.vn/mqtt';
   static const int port = 443;
 
   MqttServerClient? _client;

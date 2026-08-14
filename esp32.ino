@@ -87,7 +87,9 @@ int wifiCount = 0;
 // ─────────────────────────────────────────────────────────────
 //  MQTT CẤU HÌNH
 // ─────────────────────────────────────────────────────────────
-#define MQTT_HOST       "mqtt.aiotlearninghub.com"
+// MQTT Broker mới — Mosquitto local, expose qua Cloudflare Tunnel
+// ESP32 gửi WSS (beginSSL) → Cloudflare lo TLS → forward WS → Mosquitto :9001
+#define MQTT_HOST       "mqtt.duynguyen.io.vn"
 #define MQTT_PORT       443
 #define CHIP_ID         "CLASSROOM_01"
 
@@ -603,7 +605,10 @@ void setup() {
   servoDoor.write(0);
   Serial.println("✅ Servo cửa đã gắn trên GPIO13");
 
-  // 7. Cấu hình MQTT WebSocket SSL
+  // 7. Cấu hình MQTT WebSocket — kết nối WSS tới mqtt.duynguyen.io.vn:443
+  // ESP32 gửi WSS (beginSSL) → Cloudflare lo TLS → forward WS → Mosquitto :9001
+  // Cloudflare nhận WSS → decrypt TLS → forward plain WS → Mosquitto :443
+  // (Mosquitto không cần SSL, Cloudflare lo phần TLS)
   wsClient.beginSSL(MQTT_HOST, MQTT_PORT, "/mqtt");
   wsClient.setExtraHeaders("Sec-WebSocket-Protocol: mqtt");
   mqttClient.begin(wsClient);

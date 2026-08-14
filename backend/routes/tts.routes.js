@@ -23,19 +23,28 @@ router.post('/say', async (req, res) => {
     const cleanPrompt = prompt.trim();
     const filename = `voice_api_${Date.now()}.mp3`;
     
-    // 1. Sinh file MP3 Tiếng Việt lưu tại https://duynguyen.io.vn/audio/
+    // 1. Sinh file MP3 Tiếng Việt + Ogg Opus (pipeline giống Xiaozhi cloud)
     const generatedFile = await ttsService.generateVietnameseTts(filename, cleanPrompt);
     const baseUrl = process.env.SERVER_BASE_URL || 'https://duynguyen.io.vn';
     const audioUrl = generatedFile ? `${baseUrl}/audio/${generatedFile}` : '';
+    let opusUrl = '';
+    try {
+      const opusService = require('../services/opus.service');
+      const oggName = await opusService.ensureOggFromMp3(generatedFile);
+      opusUrl = `${baseUrl}/audio/${oggName}`;
+    } catch (e) {
+      console.warn('⚠️ [TTS] Opus convert:', e.message);
+    }
 
     const ttsPayload = JSON.stringify({
       prompt: cleanPrompt,
       text: cleanPrompt,
       audio_url: audioUrl,
+      opus_url: opusUrl || undefined,
       say: true
     });
 
-    // 2. Stream âm thanh & thông báo trực tiếp tới Xiaozhi ESP32 qua WebSocket Server
+    // 2. Stream Opus frames tới ESP32 qua WebSocket (tts start/stop + binary)
     await websocketService.streamTtsToEsp32(cleanPrompt, audioUrl, generatedFile);
 
     // 3. Gửi tín hiệu phát loa Xiaozhi qua MQTT Topic 'cmnd/xiaozhi_tts/say'
@@ -44,15 +53,16 @@ router.post('/say', async (req, res) => {
     // 4. Gửi thông báo MCP nếu có kết nối WebSocket Cloud
     xiaozhiService.sendTtsSay(cleanPrompt);
 
-    console.log(`📢 [API /api/tts/say] Streamed to Xiaozhi ESP32 via WebSocket, MQTT & Cloud: "${cleanPrompt}"`);
-    console.log(`🔗 Audio URL: ${audioUrl}`);
+    console.log(`📢 [API /api/tts/say] Streamed Opus to Xiaozhi via WebSocket: "${cleanPrompt}"`);
+    console.log(`🔗 Audio URL: ${audioUrl}${opusUrl ? ` | Opus: ${opusUrl}` : ''}`);
 
     return res.json({
       success: true,
-      message: 'Đã tạo voice Tiếng Việt và phát loa Xiaozhi thành công qua WebSocket & https://duynguyen.io.vn!',
+      message: 'Đã tạo voice + stream Opus tới Xiaozhi ESP32!',
       data: {
         prompt: cleanPrompt,
         audioUrl: audioUrl,
+        opusUrl: opusUrl || undefined,
         filename: generatedFile,
         topic: 'cmnd/xiaozhi_tts/say'
       }

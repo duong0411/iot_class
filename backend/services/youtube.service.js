@@ -1,8 +1,62 @@
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const https = require('https');
 const http = require('http');
 const { spawn } = require('child_process');
+
+let ffmpegPath = null;
+try {
+  ffmpegPath = require('ffmpeg-static');
+} catch (_) {
+  ffmpegPath = null;
+}
+
+let youtubeDlExec = null;
+try {
+  youtubeDlExec = require('youtube-dl-exec');
+} catch (_) {
+  youtubeDlExec = null;
+}
+
+/** Temp dir without spaces — yt-dlp on Windows breaks with "C:\Users\Duong Phung\..." */
+function safeTempDir() {
+  const candidates = [
+    'C:\\Temp',
+    path.join('C:', 'Windows', 'Temp'),
+    process.env.TEMP,
+    process.env.TMP,
+    os.tmpdir()
+  ].filter(Boolean);
+  for (const c of candidates) {
+    if (!/\s/.test(c)) {
+      try {
+        if (!fs.existsSync(c)) fs.mkdirSync(c, { recursive: true });
+        return c;
+      } catch (_) {}
+    }
+  }
+  return os.tmpdir();
+}
+
+function resolveFfmpegDir() {
+  if (!ffmpegPath || !fs.existsSync(ffmpegPath)) return null;
+  // Paths with spaces break youtube-dl-exec (shell:true on Windows).
+  if (!/\s/.test(ffmpegPath)) return path.dirname(ffmpegPath);
+
+  const destDir = path.join(safeTempDir(), 'alot-ffmpeg');
+  const destBin = path.join(destDir, path.basename(ffmpegPath));
+  try {
+    if (!fs.existsSync(destDir)) fs.mkdirSync(destDir, { recursive: true });
+    if (!fs.existsSync(destBin) || fs.statSync(destBin).size !== fs.statSync(ffmpegPath).size) {
+      fs.copyFileSync(ffmpegPath, destBin);
+    }
+    return destDir;
+  } catch (e) {
+    console.warn(`⚠️ [YouTube] Cannot stage ffmpeg without spaces: ${e.message}`);
+    return path.dirname(ffmpegPath);
+  }
+}
 
 class YoutubeService {
   constructor() {
@@ -62,51 +116,101 @@ class YoutubeService {
     });
   }
 
-  async _viaYtDlp(youtubeUrl, destPath) {
-    const args = [
-      '-m', 'yt_dlp',
-      '-x',
-      '--audio-format', 'mp3',
-      '--audio-quality', '5',
-      '--no-playlist',
-      '-o', destPath.replace(/\.mp3$/i, '.%(ext)s'),
-      youtubeUrl
-    ];
-
-    const pyCandidates = [
-      process.env.PYTHON_PATH,
-      'C:\\esptools\\python_env\\idf5.5_py3.13_env\\Scripts\\python.exe',
-      'python',
-      'py'
-    ].filter(Boolean);
-
-    let lastErr = null;
-    for (const py of pyCandidates) {
-      try {
-        await new Promise((resolve, reject) => {
-          const child = spawn(py, args, {
-            windowsHide: true,
-            stdio: ['ignore', 'pipe', 'pipe']
-          });
-          let stderr = '';
-          child.stderr.on('data', (d) => { stderr += d.toString(); });
-          child.on('error', reject);
-          child.on('close', (code) => {
-            if (fs.existsSync(destPath)) return resolve();
-            const alt = destPath.replace(/\.mp3$/i, '') + '.mp3';
-            if (fs.existsSync(alt)) {
-              if (alt !== destPath) fs.renameSync(alt, destPath);
-              return resolve();
-            }
-            reject(new Error(stderr.slice(-500) || `yt_dlp exit ${code}`));
-          });
-        });
-        return destPath;
-      } catch (e) {
-        lastErr = e;
-      }
+  _ensureMp3Ready(destPath) {
+    if (fs.existsSync(destPath)) return destPath;
+    const alt = destPath.replace(/\.mp3$/i, '') + '.mp3';
+    if (fs.existsSync(alt)) {
+      if (alt !== destPath) fs.renameSync(alt, destPath);
+      return destPath;
     }
-    throw lastErr || new Error('yt_dlp failed');
+    return null;
+  }
+
+  async _downloadViaTool(runDownload, destPath) {
+    const tmpDir = safeTempDir();
+    const tmpName = `alot_yt_${Date.now()}.mp3`;
+    const tmpPath = path.join(tmpDir, tmpName);
+    try {
+      await runDownload(tmpPath);
+      if (!this._ensureMp3Ready(tmpPath)) {
+        throw new Error('Không tạo được file mp3 (thiếu ffmpeg?)');
+      }
+      fs.copyFileSync(tmpPath, destPath);
+      return destPath;
+    } finally {
+      try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath); } catch (_) {}
+    }
+  }
+
+  async _viaYoutubeDlExec(youtubeUrl, destPath) {
+    if (!youtubeDlExec) throw new Error('youtube-dl-exec chưa được cài (npm install youtube-dl-exec)');
+
+    return this._downloadViaTool(async (tmpPath) => {
+      const outTemplate = tmpPath.replace(/\.mp3$/i, '.%(ext)s');
+      const flags = {
+        extractAudio: true,
+        audioFormat: 'mp3',
+        audioQuality: '5',
+        noPlaylist: true,
+        output: outTemplate,
+        noCheckCertificates: true,
+        noWarnings: true,
+        preferFreeFormats: true,
+      };
+      if (ffmpegPath) {
+        const ffDir = resolveFfmpegDir();
+        if (ffDir) flags.ffmpegLocation = ffDir;
+      }
+      await youtubeDlExec(youtubeUrl, flags);
+    }, destPath);
+  }
+
+  async _viaYtDlp(youtubeUrl, destPath) {
+    return this._downloadViaTool(async (tmpPath) => {
+      const args = [
+        '-m', 'yt_dlp',
+        '-x',
+        '--audio-format', 'mp3',
+        '--audio-quality', '5',
+        '--no-playlist',
+        '-o', tmpPath.replace(/\.mp3$/i, '.%(ext)s'),
+        youtubeUrl
+      ];
+      if (ffmpegPath) {
+        const ffDir = resolveFfmpegDir();
+        if (ffDir) args.splice(args.length - 1, 0, '--ffmpeg-location', ffDir);
+      }
+
+      const pyCandidates = [
+        process.env.PYTHON_PATH,
+        'C:\\esptools\\python_env\\idf5.5_py3.13_env\\Scripts\\python.exe',
+        'python',
+        'py'
+      ].filter(Boolean);
+
+      let lastErr = null;
+      for (const py of pyCandidates) {
+        try {
+          await new Promise((resolve, reject) => {
+            const child = spawn(py, args, {
+              windowsHide: true,
+              stdio: ['ignore', 'pipe', 'pipe']
+            });
+            let stderr = '';
+            child.stderr.on('data', (d) => { stderr += d.toString(); });
+            child.on('error', reject);
+            child.on('close', (code) => {
+              if (this._ensureMp3Ready(tmpPath)) return resolve();
+              reject(new Error(stderr.slice(-800) || `yt_dlp exit ${code}`));
+            });
+          });
+          return;
+        } catch (e) {
+          lastErr = e;
+        }
+      }
+      throw lastErr || new Error('yt_dlp failed');
+    }, destPath);
   }
 
   async _viaCobalt(youtubeUrl, destPath) {
@@ -175,18 +279,29 @@ class YoutubeService {
     const destPath = path.join(this.publicDir, filename);
 
     console.log(`🎬 [YouTube] Fetching audio: ${url} -> ${filename}`);
+    console.log(`🎬 [YouTube] ffmpeg: ${ffmpegPath || 'NOT FOUND'} | youtube-dl-exec: ${youtubeDlExec ? 'ok' : 'missing'}`);
+
+    const errors = [];
 
     try {
-      await this._viaYtDlp(url, destPath);
+      await this._viaYoutubeDlExec(url, destPath);
     } catch (e1) {
-      console.warn(`⚠️ [YouTube] yt_dlp failed: ${e1.message}`);
+      errors.push(`youtube-dl-exec: ${e1.message}`);
+      console.warn(`⚠️ [YouTube] youtube-dl-exec failed: ${e1.message}`);
       try {
-        await this._viaCobalt(url, destPath);
+        await this._viaYtDlp(url, destPath);
       } catch (e2) {
-        console.error(`❌ [YouTube] cobalt failed: ${e2.message}`);
-        throw new Error(
-          'Không tải được audio YouTube. Cài Python package yt-dlp và ffmpeg trên máy chạy backend, rồi thử lại.'
-        );
+        errors.push(`yt_dlp: ${e2.message}`);
+        console.warn(`⚠️ [YouTube] yt_dlp failed: ${e2.message}`);
+        try {
+          await this._viaCobalt(url, destPath);
+        } catch (e3) {
+          errors.push(`cobalt: ${e3.message}`);
+          console.error(`❌ [YouTube] cobalt failed: ${e3.message}`);
+          throw new Error(
+            `Không tải được audio YouTube. Chi tiết: ${errors.join(' | ')}`
+          );
+        }
       }
     }
 

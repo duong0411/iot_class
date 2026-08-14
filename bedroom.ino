@@ -27,7 +27,7 @@ IPAddress apIP(192, 168, 4, 1);
 const byte DNS_PORT = 53;
 
 // MQTT
-#define MQTT_HOST   "mqtt.aiotlearninghub.com"
+#define MQTT_HOST   "mqtt.duynguyen.io.vn"
 #define MQTT_PORT   443
 #define CHIP_ID     "456"
 

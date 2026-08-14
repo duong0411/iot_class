@@ -1,6 +1,6 @@
 const mqtt = require('mqtt');
 
-const client = mqtt.connect('wss://mqtt.aiotlearninghub.com:443/mqtt', {
+const client = mqtt.connect('wss://mqtt.duynguyen.io.vn:443/mqtt', {
   clientId: 'test_node_client_' + Math.random().toString(16).substr(2, 8),
 });
 

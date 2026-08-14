@@ -4,7 +4,7 @@ import 'package:mqtt_client/mqtt_server_client.dart';
 
 Future<void> main() async {
   print('--- Testing correct WSS setup ---');
-  final client = MqttServerClient('wss://mqtt.aiotlearninghub.com/mqtt', 'test_client_123');
+  final client = MqttServerClient('wss://mqtt.duynguyen.io.vn/mqtt', 'test_client_123');
   client.port = 443;
   client.useWebSocket = true;
   client.websocketProtocols = MqttClientConstants.protocolsSingleDefault; // MUST INCLUDE THIS!

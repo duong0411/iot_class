@@ -91,3 +91,8 @@ local.properties
 app/GoogleService-Info.plist
 android/app/google-services.json
 
+# Audio files (TTS generated, không push lên git)
+*.mp3
+*.ogg
+*.wav
+backend/public/audio/
