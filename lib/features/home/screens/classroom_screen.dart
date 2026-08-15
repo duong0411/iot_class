@@ -76,7 +76,8 @@ class ClassroomScreen extends StatelessWidget {
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          await Future.delayed(const Duration(milliseconds: 500));
+          deviceProvider.requestClassroomStatus();
+          await Future.delayed(const Duration(milliseconds: 600));
         },
         child: SingleChildScrollView(
           physics: const AlwaysScrollableScrollPhysics(),

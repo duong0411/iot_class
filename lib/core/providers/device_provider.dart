@@ -1,12 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/node_model.dart';
 import '../services/mqtt_service.dart';
 import '../services/node_service.dart';
 import 'student_provider.dart';
 
-class DeviceProvider extends ChangeNotifier {
+class DeviceProvider extends ChangeNotifier with WidgetsBindingObserver {
   final MqttService _mqttService = MqttService();
   final NodeService _nodeService = NodeService();
   StreamSubscription? _mqttSubscription;
@@ -19,14 +21,81 @@ class DeviceProvider extends ChangeNotifier {
 
   bool get isMqttConnected => _mqttService.isConnected;
 
+  static const String _cacheKeyPrefix = 'classroom_cache_';
+
   DeviceProvider() {
     _init();
   }
 
   Future<void> _init() async {
+    WidgetsBinding.instance.addObserver(this);
+    await _loadCachedState();
     _startClassroomWatchdog();
+    _startStatusPolling();
     await fetchNodes();
     await _connectMqtt();
+  }
+
+  Future<void> _loadCachedState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      classroomTemp = prefs.getDouble('${_cacheKeyPrefix}temp') ?? classroomTemp;
+      classroomHumi = prefs.getDouble('${_cacheKeyPrefix}humi') ?? classroomHumi;
+      classroomLightStatus = prefs.getString('${_cacheKeyPrefix}light') ?? classroomLightStatus;
+      classroomFanState = prefs.getBool('${_cacheKeyPrefix}fan') ?? classroomFanState;
+      classroomLedState = prefs.getBool('${_cacheKeyPrefix}led') ?? classroomLedState;
+      classroomDoorState = prefs.getBool('${_cacheKeyPrefix}door') ?? classroomDoorState;
+      classroomDoorAngle = prefs.getDouble('${_cacheKeyPrefix}door_angle') ?? classroomDoorAngle;
+      classroomMode = prefs.getString('${_cacheKeyPrefix}mode') ?? classroomMode;
+      final lastMs = prefs.getInt('${_cacheKeyPrefix}last_time');
+      if (lastMs != null) {
+        lastClassroomDataTime = DateTime.fromMillisecondsSinceEpoch(lastMs);
+      }
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<void> _saveCachedState() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setDouble('${_cacheKeyPrefix}temp', classroomTemp);
+      await prefs.setDouble('${_cacheKeyPrefix}humi', classroomHumi);
+      await prefs.setString('${_cacheKeyPrefix}light', classroomLightStatus);
+      await prefs.setBool('${_cacheKeyPrefix}fan', classroomFanState);
+      await prefs.setBool('${_cacheKeyPrefix}led', classroomLedState);
+      await prefs.setBool('${_cacheKeyPrefix}door', classroomDoorState);
+      await prefs.setDouble('${_cacheKeyPrefix}door_angle', classroomDoorAngle);
+      await prefs.setString('${_cacheKeyPrefix}mode', classroomMode);
+      if (lastClassroomDataTime != null) {
+        await prefs.setInt('${_cacheKeyPrefix}last_time', lastClassroomDataTime!.millisecondsSinceEpoch);
+      }
+    } catch (_) {}
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      if (kDebugMode) print('DeviceProvider: App resumed -> Re-checking MQTT & polling status');
+      if (!_mqttService.isConnected) {
+        _connectMqtt();
+      }
+      requestClassroomStatus();
+    } else if (state == AppLifecycleState.paused || state == AppLifecycleState.detached) {
+      _saveCachedState();
+    }
+  }
+
+  void _startStatusPolling() {
+    _statusPollingTimer?.cancel();
+    _statusPollingTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      if (_mqttService.isConnected) {
+        requestClassroomStatus();
+      }
+    });
+  }
+
+  void requestClassroomStatus() {
+    _mqttService.requestClassroomStatus();
   }
 
   Future<void> fetchNodes() async {
@@ -45,9 +114,9 @@ class DeviceProvider extends ChangeNotifier {
         _handleMqttMessage(data['topic']!, data['raw']!.toString());
       });
       _mqttService.subscribeNodes(_nodes);
+      requestClassroomStatus();
       notifyListeners();
     } else {
-      // Tự động thử lại kết nối MQTT sau 3s nếu thất bại
       Timer(const Duration(seconds: 3), () {
         if (!_mqttService.isConnected) {
           _connectMqtt();
@@ -118,6 +187,7 @@ class DeviceProvider extends ChangeNotifier {
   bool isClassroomDeviceOnline = false;
   DateTime? lastClassroomDataTime;
   Timer? _classroomWatchdogTimer;
+  Timer? _statusPollingTimer;
 
   void attachStudentProvider(StudentProvider provider) {
     studentProvider = provider;
@@ -139,7 +209,7 @@ class DeviceProvider extends ChangeNotifier {
 
   void _handleMqttMessage(String topic, String payload) {
     // Handle CLASSROOM_01 LWT and telemetry status
-    if (topic.contains("CLASSROOM_01") || topic.startsWith("tele/classroom")) {
+    if (topic.contains("CLASSROOM_01") || topic.startsWith("tele/classroom") || topic.startsWith("stat/classroom")) {
       if (payload == "offline") {
         isClassroomDeviceOnline = false;
         notifyListeners();
@@ -184,21 +254,21 @@ class DeviceProvider extends ChangeNotifier {
     }
     value ??= payload.trim();
 
+    bool classroomStateChanged = false;
+
     // Handle ESP32 Smart Classroom Specific Topics
     if (topic == 'tele/classroom_temp/status') {
       final parsed = (value is num) ? value.toDouble() : double.tryParse(value.toString());
       if (parsed != null) {
         classroomTemp = parsed;
-        notifyListeners();
+        classroomStateChanged = true;
       }
-      return;
     } else if (topic == 'tele/classroom_humi/status') {
       final parsed = (value is num) ? value.toDouble() : double.tryParse(value.toString());
       if (parsed != null) {
         classroomHumi = parsed;
-        notifyListeners();
+        classroomStateChanged = true;
       }
-      return;
     } else if (topic == 'tele/classroom_light/status') {
       final str = value.toString().trim();
       if (str == 'Tot' || str.toUpperCase() == 'LOW' || str == '0' || str.toUpperCase() == 'SÁNG') {
@@ -208,26 +278,21 @@ class DeviceProvider extends ChangeNotifier {
       } else {
         classroomLightStatus = str;
       }
-      notifyListeners();
-      return;
+      classroomStateChanged = true;
     } else if (topic == 'tele/classroom_mode/status') {
       classroomMode = value.toString().toUpperCase().contains('MANUAL') ? 'MANUAL' : 'AUTO';
-      notifyListeners();
-      return;
+      classroomStateChanged = true;
     } else if (topic == 'tele/classroom_led/status') {
       classroomLedState = (value.toString().toUpperCase() == 'ON' || value.toString() == '1');
-      notifyListeners();
-      return;
+      classroomStateChanged = true;
     } else if (topic == 'tele/classroom_fan/status') {
       classroomFanState = (value.toString().toUpperCase() == 'ON' || value.toString() == '1');
-      notifyListeners();
-      return;
+      classroomStateChanged = true;
     } else if (topic == 'tele/classroom_door/status') {
       final angle = (value is num) ? value.toDouble() : double.tryParse(value.toString()) ?? 0;
       classroomDoorAngle = angle;
       classroomDoorState = angle > 0 || value.toString().toUpperCase() == 'ON' || value.toString().toUpperCase() == 'OPEN';
-      notifyListeners();
-      return;
+      classroomStateChanged = true;
     } else if (topic == 'tele/classroom_rfid/status') {
       final rfidUid = (jsonData != null && jsonData['uid'] != null)
           ? jsonData['uid'].toString()
@@ -235,6 +300,11 @@ class DeviceProvider extends ChangeNotifier {
       if (rfidUid.isNotEmpty && rfidUid != 'online' && studentProvider != null) {
         studentProvider!.handleRFIDScanned(rfidUid);
       }
+      classroomStateChanged = true;
+    }
+
+    if (classroomStateChanged) {
+      _saveCachedState();
       notifyListeners();
       return;
     }
@@ -281,18 +351,21 @@ class DeviceProvider extends ChangeNotifier {
   void toggleClassroomMode() {
     classroomMode = (classroomMode == "AUTO") ? "MANUAL" : "AUTO";
     _mqttService.publish('cmnd/classroom_mode/POWER', classroomMode);
+    _saveCachedState();
     notifyListeners();
   }
 
   void toggleClassroomLed() {
     classroomLedState = !classroomLedState;
     _mqttService.publish('cmnd/classroom_led/POWER', classroomLedState ? "ON" : "OFF");
+    _saveCachedState();
     notifyListeners();
   }
 
   void toggleClassroomFan() {
     classroomFanState = !classroomFanState;
     _mqttService.publish('cmnd/classroom_fan/POWER', classroomFanState ? "ON" : "OFF");
+    _saveCachedState();
     notifyListeners();
   }
 
@@ -300,6 +373,7 @@ class DeviceProvider extends ChangeNotifier {
     classroomDoorState = !classroomDoorState;
     classroomDoorAngle = classroomDoorState ? 90.0 : 0.0;
     _mqttService.publish('cmnd/classroom_door/POWER', classroomDoorState ? "ON" : "OFF");
+    _saveCachedState();
     notifyListeners();
   }
 
@@ -410,6 +484,9 @@ class DeviceProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _statusPollingTimer?.cancel();
+    _classroomWatchdogTimer?.cancel();
     _mqttSubscription?.cancel();
     for (var timer in _watchdogs.values) {
       timer?.cancel();
@@ -418,3 +495,4 @@ class DeviceProvider extends ChangeNotifier {
     super.dispose();
   }
 }
+

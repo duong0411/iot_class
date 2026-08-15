@@ -22,6 +22,8 @@ class MqttService extends ChangeNotifier {
 
   MqttService();
 
+  Timer? _autoReconnectTimer;
+
   // ═══════════════════════════════════════════════════════════
   //  KẾT NỐI WSS SSL/TLS MOUNT
   // ═══════════════════════════════════════════════════════════
@@ -63,19 +65,41 @@ class MqttService extends ChangeNotifier {
     } catch (e) {
       if (kDebugMode) print('MQTT: Lỗi kết nối - $e');
       _isConnected = false;
+      _startAutoReconnectTimer();
       notifyListeners();
       return false;
     }
 
     if (_client?.connectionStatus?.state == MqttConnectionState.connected) {
       _isConnected = true;
+      _autoReconnectTimer?.cancel();
       _listenMessages();
       subscribeNodes(_currentNodes);
+      requestClassroomStatus();
       notifyListeners();
       return true;
     }
 
+    _startAutoReconnectTimer();
     return false;
+  }
+
+  void _startAutoReconnectTimer() {
+    _autoReconnectTimer?.cancel();
+    _autoReconnectTimer = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (!_isConnected && (_client?.connectionStatus?.state != MqttConnectionState.connected)) {
+        if (kDebugMode) print('MQTT: Auto-reconnect timer checking connection...');
+        connect();
+      }
+    });
+  }
+
+  // Helper yêu cầu ESP32 phản hồi ngay trạng thái mới nhất
+  void requestClassroomStatus() {
+    publish('cmnd/CLASSROOM_01/status', 'STATE');
+    publish('cmnd/classroom_status/get', '{}');
+    publish('cmnd/classroom_mode/get', '{}');
+    publishScheduleGet();
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -97,11 +121,14 @@ class MqttService extends ChangeNotifier {
       'tele/classroom_rfid/status',
       'tele/classroom_mode/status',
       'stat/classroom_schedule/list',
+      'stat/CLASSROOM_01/+',
+      'stat/classroom/+',
     };
 
     for (var node in nodes) {
       if (node.chipId.isNotEmpty) {
         topics.add('tele/${node.chipId}/status');
+        topics.add('stat/${node.chipId}/+');
       }
     }
 
@@ -202,12 +229,15 @@ class MqttService extends ChangeNotifier {
   void _onConnected() {
     if (kDebugMode) print('MQTT: ✅ Đã kết nối WSS thành công!');
     _isConnected = true;
+    _autoReconnectTimer?.cancel();
+    requestClassroomStatus();
     notifyListeners();
   }
 
   void _onDisconnected() {
     if (kDebugMode) print('MQTT: ⚠️ Đã ngắt kết nối');
     _isConnected = false;
+    _startAutoReconnectTimer();
     notifyListeners();
   }
 
@@ -218,7 +248,9 @@ class MqttService extends ChangeNotifier {
   void _onAutoReconnected() {
     if (kDebugMode) print('MQTT: ✅ Tự động kết nối lại thành công!');
     _isConnected = true;
+    _autoReconnectTimer?.cancel();
     subscribeNodes(_currentNodes);
+    requestClassroomStatus();
     notifyListeners();
   }
 
@@ -230,9 +262,9 @@ class MqttService extends ChangeNotifier {
   //  CLEANUP
   // ═══════════════════════════════════════════════════════════
   void disconnect() {
+    _autoReconnectTimer?.cancel();
     _client?.disconnect();
     _isConnected = false;
     _currentNodes.clear();
-    notifyListeners();
   }
 }
