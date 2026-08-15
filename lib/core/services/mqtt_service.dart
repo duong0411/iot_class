@@ -6,6 +6,10 @@ import 'package:mqtt_client/mqtt_server_client.dart';
 import '../models/node_model.dart';
 
 class MqttService extends ChangeNotifier {
+  static final MqttService _instance = MqttService._internal();
+  factory MqttService() => _instance;
+  MqttService._internal();
+
   static const String brokerHost = 'mqtt.duynguyen.io.vn';
   static const String wssUrl = 'wss://mqtt.duynguyen.io.vn/mqtt';
   static const int port = 443;
@@ -14,13 +18,11 @@ class MqttService extends ChangeNotifier {
   bool _isConnected = false;
   bool get isConnected => _isConnected;
 
+  String? _persistentClientId;
   List<NodeModel> _currentNodes = [];
 
-  // Stream truyền dữ liệu về UI & DeviceProvider
   final _messageController = StreamController<Map<String, dynamic>>.broadcast();
   Stream<Map<String, dynamic>> get messages => _messageController.stream;
-
-  MqttService();
 
   Timer? _autoReconnectTimer;
 
@@ -32,9 +34,15 @@ class MqttService extends ChangeNotifier {
       return true;
     }
 
-    final clientId = 'flutter_${DateTime.now().millisecondsSinceEpoch}';
+    _persistentClientId ??= 'flutter_app_client';
 
-    _client = MqttServerClient.withPort(wssUrl, clientId, port);
+    if (_client != null) {
+      try {
+        _client!.disconnect();
+      } catch (_) {}
+    }
+
+    _client = MqttServerClient.withPort(wssUrl, _persistentClientId!, port);
     _client!.useWebSocket = true;
     _client!.secure = false;
     _client!.websocketProtocols = MqttClientConstants.protocolsSingleDefault;
@@ -50,18 +58,18 @@ class MqttService extends ChangeNotifier {
     _client!.onSubscribed = _onSubscribed;
 
     final connMsg = MqttConnectMessage()
-        .withClientIdentifier(clientId)
+        .withClientIdentifier(_persistentClientId!)
         .startClean()
         .withWillTopic('tele/flutter_app/status')
         .withWillMessage('offline')
         .withWillRetain()
-        .withWillQos(MqttQos.atLeastOnce);
+        .withWillQos(MqttQos.atMostOnce);
 
     _client!.connectionMessage = connMsg;
 
     try {
-      if (kDebugMode) print('MQTT: Đang kết nối WSS tới $wssUrl ...');
-      await _client!.connect().timeout(const Duration(seconds: 12));
+      if (kDebugMode) print('MQTT: Đang kết nối WSS tới $wssUrl (Client ID: $_persistentClientId) ...');
+      await _client!.connect().timeout(const Duration(seconds: 10));
     } catch (e) {
       if (kDebugMode) print('MQTT: Lỗi kết nối - $e');
       _isConnected = false;
@@ -96,9 +104,9 @@ class MqttService extends ChangeNotifier {
 
   // Helper yêu cầu ESP32 phản hồi ngay trạng thái mới nhất
   void requestClassroomStatus() {
-    publish('cmnd/CLASSROOM_01/status', 'STATE');
-    publish('cmnd/classroom_status/get', '{}');
-    publish('cmnd/classroom_mode/get', '{}');
+    publish('cmnd/CLASSROOM_01/status', 'STATE', qos: MqttQos.atMostOnce);
+    publish('cmnd/classroom_status/get', '{}', qos: MqttQos.atMostOnce);
+    publish('cmnd/classroom_mode/get', '{}', qos: MqttQos.atMostOnce);
     publishScheduleGet();
   }
 
@@ -134,7 +142,7 @@ class MqttService extends ChangeNotifier {
 
     for (final t in topics) {
       try {
-        _client!.subscribe(t, MqttQos.atLeastOnce);
+        _client!.subscribe(t, MqttQos.atMostOnce);
       } catch (_) {}
     }
   }
@@ -171,13 +179,13 @@ class MqttService extends ChangeNotifier {
   }
 
   // ═══════════════════════════════════════════════════════════
-  //  PUBLISH LỆNH & LỊCH TỰ ĐỘNG
+  //  PUBLISH LỆNH & LỊCH TỰ ĐỘNG (QoS 0 làm mặc định)
   // ═══════════════════════════════════════════════════════════
-  void publish(String topic, String message) {
+  void publish(String topic, String message, {MqttQos qos = MqttQos.atMostOnce}) {
     if (!_isConnected || _client == null || _client?.connectionStatus?.state != MqttConnectionState.connected) {
       if (kDebugMode) print('MQTT TX Warning: Chưa kết nối MQTT, đang kết nối lại...');
       connect().then((ok) {
-        if (ok) publish(topic, message);
+        if (ok) publish(topic, message, qos: qos);
       });
       return;
     }
@@ -187,7 +195,7 @@ class MqttService extends ChangeNotifier {
       builder.addUTF8String(message);
 
       if (kDebugMode) print('MQTT TX: [$topic] → $message');
-      _client!.publishMessage(topic, MqttQos.atLeastOnce, builder.payload!);
+      _client!.publishMessage(topic, qos, builder.payload!);
     } catch (e) {
       if (kDebugMode) print('MQTT TX error: $e');
     }
@@ -195,22 +203,22 @@ class MqttService extends ChangeNotifier {
 
   // Helper cho lệnh thiết bị
   void publishCommand(String chipId, String deviceSuffix, String command) {
-    publish('cmnd/${chipId}_$deviceSuffix/POWER', command);
+    publish('cmnd/${chipId}_$deviceSuffix/POWER', command, qos: MqttQos.atMostOnce);
   }
 
   // Helper cho Lịch Tự Động & Lời Dẫn Xiaozhi
   void publishScheduleSet(List<Map<String, dynamic>> schedules) {
     final payload = jsonEncode({'schedules': schedules});
-    publish('cmnd/classroom_schedule/set', payload);
+    publish('cmnd/classroom_schedule/set', payload, qos: MqttQos.atMostOnce);
   }
 
   void publishScheduleDelete(String scheduleId) {
     final payload = jsonEncode({'id': scheduleId});
-    publish('cmnd/classroom_schedule/delete', payload);
+    publish('cmnd/classroom_schedule/delete', payload, qos: MqttQos.atMostOnce);
   }
 
   void publishScheduleGet() {
-    publish('cmnd/classroom_schedule/get', '{}');
+    publish('cmnd/classroom_schedule/get', '{}', qos: MqttQos.atMostOnce);
   }
 
   // Helper phát giọng nói trực tiếp qua loa Xiaozhi ESP32
@@ -220,7 +228,7 @@ class MqttService extends ChangeNotifier {
       'text': prompt,
       'emotion': 'happy',
     });
-    publish('cmnd/xiaozhi_tts/say', payload);
+    publish('cmnd/xiaozhi_tts/say', payload, qos: MqttQos.atMostOnce);
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -268,3 +276,4 @@ class MqttService extends ChangeNotifier {
     _currentNodes.clear();
   }
 }
+
