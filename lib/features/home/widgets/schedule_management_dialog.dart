@@ -144,11 +144,19 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final mediaQuery = MediaQuery.of(context);
+    final screenWidth = mediaQuery.size.width;
+    final isSmallScreen = screenWidth < 400;
+
     return Dialog(
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: isSmallScreen ? 12 : 20,
+        vertical: 24,
+      ),
       backgroundColor: const Color(0xFF1E293B),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       child: Container(
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(isSmallScreen ? 14 : 20),
         constraints: const BoxConstraints(maxWidth: 520, maxHeight: 680),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -156,26 +164,34 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
           children: [
             Row(
               children: [
-                const Icon(Icons.alarm_on, color: Colors.cyanAccent, size: 28),
-                const SizedBox(width: 10),
+                const Icon(Icons.alarm_on, color: Colors.cyanAccent, size: 26),
+                const SizedBox(width: 8),
                 const Expanded(
                   child: Text(
                     'Lịch Auto & Lời Dẫn Xiaozhi',
-                    style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white54),
+                  constraints: const BoxConstraints(),
+                  padding: const EdgeInsets.all(4),
+                  icon: const Icon(Icons.close, color: Colors.white54, size: 22),
                   onPressed: () => Navigator.pop(context),
                 ),
               ],
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 4),
             const Text(
-              'TTS giọng nói · tải MP3 · hoặc dán link YouTube để Xiaozhi phát đúng giờ',
-              style: TextStyle(color: Colors.white60, fontSize: 12),
+              'TTS giọng nói · tải MP3 · dán link YouTube để phát đúng giờ',
+              style: TextStyle(color: Colors.white60, fontSize: 11),
             ),
-            const Divider(color: Colors.white24, height: 24),
+            const Divider(color: Colors.white24, height: 20),
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator(color: Colors.cyanAccent))
@@ -183,7 +199,8 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                       ? const Center(
                           child: Text(
                             'Chưa có mốc lịch nào. Nhấn "+ Thêm Lịch" bên dưới!',
-                            style: TextStyle(color: Colors.white38),
+                            style: TextStyle(color: Colors.white38, fontSize: 13),
+                            textAlign: TextAlign.center,
                           ),
                         )
                       : ListView.separated(
@@ -192,81 +209,144 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                           itemBuilder: (context, index) {
                             final item = _schedules[index];
                             return Container(
-                              padding: const EdgeInsets.all(12),
+                              padding: EdgeInsets.all(isSmallScreen ? 10 : 12),
                               decoration: BoxDecoration(
                                 color: const Color(0xFF0F172A),
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(14),
                                 border: Border.all(
                                   color: item.enabled ? Colors.cyan.withOpacity(0.5) : Colors.white12,
+                                  width: item.enabled ? 1.5 : 1.0,
                                 ),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Row(
+                                    crossAxisAlignment: CrossAxisAlignment.center,
                                     children: [
-                                      Text(
-                                        item.timeFormatted,
-                                        style: TextStyle(
-                                          color: item.enabled ? Colors.cyanAccent : Colors.white54,
-                                          fontSize: 22,
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                                        decoration: BoxDecoration(
-                                          color: _sourceColor(item.audioSource).withOpacity(0.15),
-                                          borderRadius: BorderRadius.circular(8),
-                                          border: Border.all(color: _sourceColor(item.audioSource).withOpacity(0.5)),
-                                        ),
-                                        child: Row(
-                                          mainAxisSize: MainAxisSize.min,
+                                      Expanded(
+                                        child: Wrap(
+                                          crossAxisAlignment: WrapCrossAlignment.center,
+                                          spacing: 6,
+                                          runSpacing: 4,
                                           children: [
-                                            Icon(_sourceIcon(item.audioSource), size: 14, color: _sourceColor(item.audioSource)),
-                                            const SizedBox(width: 4),
                                             Text(
-                                              item.sourceLabel,
-                                              style: TextStyle(color: _sourceColor(item.audioSource), fontSize: 11, fontWeight: FontWeight.w600),
+                                              item.timeFormatted,
+                                              style: TextStyle(
+                                                color: item.enabled ? Colors.cyanAccent : Colors.white54,
+                                                fontSize: 20,
+                                                fontWeight: FontWeight.bold,
+                                              ),
+                                            ),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: _sourceColor(item.audioSource).withOpacity(0.15),
+                                                borderRadius: BorderRadius.circular(6),
+                                                border: Border.all(
+                                                  color: _sourceColor(item.audioSource).withOpacity(0.4),
+                                                ),
+                                              ),
+                                              child: Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Icon(
+                                                    _sourceIcon(item.audioSource),
+                                                    size: 12,
+                                                    color: _sourceColor(item.audioSource),
+                                                  ),
+                                                  const SizedBox(width: 4),
+                                                  Text(
+                                                    item.sourceLabel,
+                                                    style: TextStyle(
+                                                      color: _sourceColor(item.audioSource),
+                                                      fontSize: 10,
+                                                      fontWeight: FontWeight.w600,
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
                                             ),
                                           ],
                                         ),
                                       ),
-                                      const Spacer(),
-                                      Switch(
-                                        value: item.enabled,
-                                        activeColor: Colors.cyanAccent,
-                                        onChanged: (val) {
-                                          setState(() {
-                                            _schedules[index] = item.copyWith(enabled: val);
-                                          });
-                                          _saveAndPublish(context);
-                                        },
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.edit, color: Colors.cyanAccent, size: 20),
-                                        onPressed: () => _showEditor(context, index: index),
-                                      ),
-                                      IconButton(
-                                        icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 20),
-                                        onPressed: () {
-                                          setState(() => _schedules.removeAt(index));
-                                          _saveAndPublish(context);
-                                        },
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Transform.scale(
+                                            scale: 0.8,
+                                            child: Switch(
+                                              value: item.enabled,
+                                              activeColor: Colors.cyanAccent,
+                                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                              onChanged: (val) {
+                                                setState(() {
+                                                  _schedules[index] = item.copyWith(enabled: val);
+                                                });
+                                                _saveAndPublish(context);
+                                              },
+                                            ),
+                                          ),
+                                          IconButton(
+                                            constraints: const BoxConstraints(),
+                                            padding: const EdgeInsets.all(4),
+                                            icon: const Icon(Icons.edit_outlined, color: Colors.cyanAccent, size: 18),
+                                            tooltip: 'Sửa',
+                                            onPressed: () => _showEditor(context, index: index),
+                                          ),
+                                          const SizedBox(width: 2),
+                                          IconButton(
+                                            constraints: const BoxConstraints(),
+                                            padding: const EdgeInsets.all(4),
+                                            icon: const Icon(Icons.delete_outline, color: Colors.redAccent, size: 18),
+                                            tooltip: 'Xóa',
+                                            onPressed: () {
+                                              setState(() => _schedules.removeAt(index));
+                                              _saveAndPublish(context);
+                                            },
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 6),
-                                  Text(
-                                    item.audioSource == 'youtube'
-                                        ? (item.youtubeUrl.isEmpty ? '(Chưa có link YouTube)' : item.youtubeUrl)
-                                        : item.audioSource == 'mp3'
-                                            ? (item.audioUrl.isEmpty ? '(Chưa có file MP3)' : item.audioUrl.split('/').last)
-                                            : (item.prompt.isEmpty ? '(Không có lời dẫn)' : '"${item.prompt}"'),
-                                    style: const TextStyle(color: Colors.white70, fontSize: 13, fontStyle: FontStyle.italic),
-                                    maxLines: 2,
-                                    overflow: TextOverflow.ellipsis,
+                                  const SizedBox(height: 8),
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFF1E293B).withOpacity(0.6),
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Icon(
+                                          item.audioSource == 'youtube'
+                                              ? Icons.link
+                                              : item.audioSource == 'mp3'
+                                                  ? Icons.audio_file_outlined
+                                                  : Icons.chat_bubble_outline,
+                                          size: 13,
+                                          color: Colors.white38,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Expanded(
+                                          child: Text(
+                                            item.audioSource == 'youtube'
+                                                ? (item.youtubeUrl.isEmpty ? '(Chưa có link YouTube)' : item.youtubeUrl)
+                                                : item.audioSource == 'mp3'
+                                                    ? (item.audioUrl.isEmpty ? '(Chưa có file MP3)' : item.audioUrl.split('/').last)
+                                                    : (item.prompt.isEmpty ? '(Không có lời dẫn)' : '"${item.prompt}"'),
+                                            style: const TextStyle(
+                                              color: Colors.white70,
+                                              fontSize: 12,
+                                              fontStyle: FontStyle.italic,
+                                            ),
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ],
                               ),
@@ -274,21 +354,22 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                           },
                         ),
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 14),
             Row(
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
                     onPressed: () => _showEditor(context),
-                    icon: const Icon(Icons.add, color: Colors.cyanAccent),
-                    label: const Text('Thêm Lịch', style: TextStyle(color: Colors.cyanAccent)),
+                    icon: const Icon(Icons.add, color: Colors.cyanAccent, size: 18),
+                    label: const Text('Thêm Lịch', style: TextStyle(color: Colors.cyanAccent, fontSize: 13)),
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: Colors.cyanAccent),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
                   child: ElevatedButton.icon(
                     onPressed: () async {
@@ -301,18 +382,22 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                       if (!context.mounted) return;
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(
-                          content: Text('✅ Đã lưu và đồng bộ lịch (TTS / MP3 / YouTube)!'),
+                          content: Text('✅ Đã lưu và đồng bộ lịch!'),
                           backgroundColor: Colors.green,
                           duration: Duration(seconds: 2),
                         ),
                       );
                       Navigator.pop(context);
                     },
-                    icon: const Icon(Icons.send, color: Colors.black),
-                    label: const Text('Lưu & Đồng Bộ', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+                    icon: const Icon(Icons.send, color: Colors.black, size: 18),
+                    label: const Text(
+                      'Lưu & Đồng Bộ',
+                      style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.cyanAccent,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                     ),
                   ),
                 ),
@@ -443,14 +528,22 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                 label: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(icon, size: 16, color: selected ? Colors.black : Colors.white70),
+                    Icon(icon, size: 15, color: selected ? Colors.black : Colors.white70),
                     const SizedBox(width: 4),
-                    Text(label, style: TextStyle(color: selected ? Colors.black : Colors.white70, fontSize: 12)),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        color: selected ? Colors.black : Colors.white70,
+                        fontSize: 12,
+                        fontWeight: selected ? FontWeight.bold : FontWeight.normal,
+                      ),
+                    ),
                   ],
                 ),
                 selected: selected,
                 selectedColor: Colors.cyanAccent,
                 backgroundColor: const Color(0xFF0F172A),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                 onSelected: busy
                     ? null
                     : (_) => setDialogState(() {
@@ -464,12 +557,15 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
 
             return AlertDialog(
               backgroundColor: const Color(0xFF1E293B),
+              insetPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 20),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               title: Text(
                 editing == null ? 'Thêm Mốc Lịch Tự Động' : 'Sửa Mốc Lịch Tự Động',
-                style: const TextStyle(color: Colors.white),
+                style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.bold),
               ),
-              content: SizedBox(
-                width: 420,
+              content: Container(
+                width: double.infinity,
+                constraints: const BoxConstraints(maxWidth: 420),
                 child: SingleChildScrollView(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -477,10 +573,18 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                     children: [
                       ListTile(
                         contentPadding: EdgeInsets.zero,
-                        title: const Text('Giờ phát', style: TextStyle(color: Colors.white70)),
-                        trailing: Text(
-                          '${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}',
-                          style: const TextStyle(color: Colors.cyanAccent, fontSize: 20, fontWeight: FontWeight.bold),
+                        title: const Text('Giờ phát', style: TextStyle(color: Colors.white70, fontSize: 14)),
+                        trailing: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF0F172A),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.cyanAccent.withOpacity(0.4)),
+                          ),
+                          child: Text(
+                            '${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}',
+                            style: const TextStyle(color: Colors.cyanAccent, fontSize: 18, fontWeight: FontWeight.bold),
+                          ),
                         ),
                         onTap: busy
                             ? null
@@ -491,13 +595,13 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                       ),
                       const SizedBox(height: 8),
                       const Text('Nguồn âm thanh', style: TextStyle(color: Colors.white70, fontSize: 13)),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       Wrap(
                         spacing: 8,
                         runSpacing: 8,
                         children: [
-                          sourceChip('tts', 'TTS', Icons.record_voice_over),
-                          sourceChip('mp3', 'MP3', Icons.audio_file),
+                          sourceChip('tts', 'TTS Giọng nói', Icons.record_voice_over),
+                          sourceChip('mp3', 'File MP3', Icons.audio_file),
                           sourceChip('youtube', 'YouTube', Icons.ondemand_video),
                         ],
                       ),
@@ -506,13 +610,13 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                         TextField(
                           controller: promptController,
                           enabled: !busy,
-                          style: const TextStyle(color: Colors.white),
+                          style: const TextStyle(color: Colors.white, fontSize: 14),
                           maxLines: 3,
                           decoration: const InputDecoration(
                             labelText: 'Lời dẫn giọng nói Xiaozhi',
-                            labelStyle: TextStyle(color: Colors.cyanAccent),
+                            labelStyle: TextStyle(color: Colors.cyanAccent, fontSize: 13),
                             hintText: 'Nhập câu thoại để Xiaozhi phát âm...',
-                            hintStyle: TextStyle(color: Colors.white38),
+                            hintStyle: TextStyle(color: Colors.white38, fontSize: 12),
                             enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
                             focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.cyanAccent)),
                           ),
@@ -521,10 +625,10 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                       if (audioSource == 'mp3') ...[
                         OutlinedButton.icon(
                           onPressed: busy ? null : pickMp3,
-                          icon: const Icon(Icons.upload_file, color: Colors.lightGreenAccent),
+                          icon: const Icon(Icons.upload_file, color: Colors.lightGreenAccent, size: 18),
                           label: Text(
                             pickedFileName ?? (audioUrl.isEmpty ? 'Chọn / tải file MP3 lên' : 'Đổi file MP3'),
-                            style: const TextStyle(color: Colors.lightGreenAccent),
+                            style: const TextStyle(color: Colors.lightGreenAccent, fontSize: 13),
                           ),
                           style: OutlinedButton.styleFrom(side: const BorderSide(color: Colors.lightGreenAccent)),
                         ),
@@ -537,11 +641,11 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                         TextField(
                           controller: promptController,
                           enabled: !busy,
-                          style: const TextStyle(color: Colors.white),
+                          style: const TextStyle(color: Colors.white, fontSize: 14),
                           maxLines: 1,
                           decoration: const InputDecoration(
                             labelText: 'Ghi chú (tuỳ chọn)',
-                            labelStyle: TextStyle(color: Colors.white54),
+                            labelStyle: TextStyle(color: Colors.white54, fontSize: 13),
                             enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
                             focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.cyanAccent)),
                           ),
@@ -551,12 +655,12 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                         TextField(
                           controller: youtubeController,
                           enabled: !busy,
-                          style: const TextStyle(color: Colors.white),
+                          style: const TextStyle(color: Colors.white, fontSize: 13),
                           decoration: const InputDecoration(
                             labelText: 'Link YouTube',
-                            labelStyle: TextStyle(color: Colors.redAccent),
+                            labelStyle: TextStyle(color: Colors.redAccent, fontSize: 13),
                             hintText: 'https://www.youtube.com/watch?v=...',
-                            hintStyle: TextStyle(color: Colors.white38),
+                            hintStyle: TextStyle(color: Colors.white38, fontSize: 12),
                             enabledBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.white24)),
                             focusedBorder: OutlineInputBorder(borderSide: BorderSide(color: Colors.redAccent)),
                           ),
@@ -565,19 +669,19 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                         ElevatedButton.icon(
                           onPressed: busy ? null : prepareYoutube,
                           icon: busy
-                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                              : const Icon(Icons.download, color: Colors.white),
-                          label: Text(busy ? 'Đang lấy audio...' : 'Lấy audio từ YouTube', style: const TextStyle(color: Colors.white)),
+                              ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                              : const Icon(Icons.download, color: Colors.white, size: 18),
+                          label: Text(busy ? 'Đang lấy audio...' : 'Lấy audio từ YouTube', style: const TextStyle(color: Colors.white, fontSize: 13)),
                           style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent),
                         ),
                         if (audioUrl.isNotEmpty)
                           Padding(
                             padding: const EdgeInsets.only(top: 8),
-                            child: Text('Đã sẵn sàng: ${audioUrl.split('/').last}', style: const TextStyle(color: Colors.lightGreenAccent, fontSize: 12)),
+                            child: Text('Đã sẵn sàng: ${audioUrl.split('/').last}', style: const TextStyle(color: Colors.lightGreenAccent, fontSize: 11)),
                           ),
                         const SizedBox(height: 8),
                         const Text(
-                          'File dài sẽ được loa stream (tải + phát dần), không cần cắt tay. Nên dùng MP3; YouTube backend chuyển sang MP3 trước.',
+                          'File dài sẽ được loa stream (tải + phát dần). YouTube backend sẽ tự động trích xuất audio MP3.',
                           style: TextStyle(color: Colors.white38, fontSize: 11),
                         ),
                       ],
@@ -640,7 +744,7 @@ class _ScheduleManagementDialogState extends State<ScheduleManagementDialog> {
                           Navigator.pop(ctx);
                         },
                   style: ElevatedButton.styleFrom(backgroundColor: Colors.cyanAccent),
-                  child: Text(editing == null ? 'Thêm' : 'Lưu Sửa', style: const TextStyle(color: Colors.black)),
+                  child: Text(editing == null ? 'Thêm' : 'Lưu Sửa', style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
                 ),
               ],
             );
