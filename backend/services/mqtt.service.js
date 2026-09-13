@@ -229,6 +229,36 @@ class MqttService {
       }
     }
 
+    if (topic === 'cmnd/xiaozhi_tts/say') {
+      console.log(`📢 [MQTT TTS Say] Received: ${payloadStr}`);
+      try {
+        let promptText = '';
+        let audioUrl = '';
+        const jsonMatch = payloadStr.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const json = JSON.parse(jsonMatch[0]);
+          promptText = json.prompt || json.text || '';
+          audioUrl = json.audio_url || json.audioUrl || '';
+        } else {
+          promptText = payloadStr;
+        }
+
+        if (promptText) {
+          const websocketService = require('./websocket.service');
+          const ttsService = require('./tts.service');
+          const filename = `voice_mqtt_${Date.now()}.mp3`;
+          const generatedFile = await ttsService.generateVietnameseTts(filename, promptText);
+          const baseUrl = process.env.SERVER_BASE_URL || 'https://duynguyen.io.vn';
+          const fullAudioUrl = audioUrl || `${baseUrl}/audio/${generatedFile}`;
+
+          await websocketService.streamTtsToEsp32(promptText, fullAudioUrl, generatedFile);
+        }
+      } catch (e) {
+        console.error('❌ [MQTT TTS Say Error]:', e.message);
+      }
+      return;
+    }
+
     let valStr = payloadStr;
     try {
       const jsonMatch = payloadStr.match(/\{[\s\S]*\}/);

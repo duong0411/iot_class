@@ -46,21 +46,23 @@ app.get('/audio/:file', async (req, res, next) => {
 });
 app.use('/audio', express.static(path.join(__dirname, 'public/audio')));
 
-// Connect to MongoDB
-mongoose.connect(process.env.MONGODB_URI)
-  .then(() => {
-    console.log('✅ Kết nối MongoDB thành công!');
-    console.log(`📦 Database: ${process.env.MONGODB_URI}`);
+// Connect to MongoDB (Tuỳ chọn - không bắt buộc)
+if (process.env.MONGODB_URI) {
+  mongoose.connect(process.env.MONGODB_URI)
+    .then(() => {
+      console.log('✅ Kết nối MongoDB thành công!');
+    })
+    .catch((err) => {
+      console.warn('⚠️ Không dùng MongoDB hoặc lỗi kết nối MongoDB (Bỏ qua, chạy tiếp server):', err.message);
+    });
+} else {
+  console.log('ℹ️ Không cấu hình MONGODB_URI (Bỏ qua MongoDB)');
+}
 
-    // Khởi tạo MQTT Service lắng nghe cảnh báo
-    const mqttService = require('./services/mqtt.service');
-    mqttService.connect();
-    XiaoZhiService.connect();
-  })
-  .catch((err) => {
-    console.error('❌ Lỗi kết nối MongoDB:', err.message);
-    process.exit(1);
-  });
+// Khởi tạo MQTT Service & XiaoZhi Service
+const mqttService = require('./services/mqtt.service');
+mqttService.connect();
+XiaoZhiService.connect();
 
 // Routes
 app.use('/api/auth', authRoutes);

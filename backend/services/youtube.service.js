@@ -19,11 +19,12 @@ try {
   youtubeDlExec = null;
 }
 
-/** Temp dir without spaces — yt-dlp on Windows breaks with "C:\Users\Duong Phung\..." */
+/** Temp dir without spaces — yt-dlp on Windows breaks with spaces */
 function safeTempDir() {
+  const isWindows = process.platform === 'win32';
   const candidates = [
-    'C:\\Temp',
-    path.join('C:', 'Windows', 'Temp'),
+    isWindows ? 'C:\\Temp' : '/tmp',
+    isWindows ? path.join('C:', 'Windows', 'Temp') : null,
     process.env.TEMP,
     process.env.TMP,
     os.tmpdir()
@@ -183,7 +184,8 @@ class YoutubeService {
 
       const pyCandidates = [
         process.env.PYTHON_PATH,
-        'C:\\esptools\\python_env\\idf5.5_py3.13_env\\Scripts\\python.exe',
+        process.platform === 'win32' ? 'C:\\esptools\\python_env\\idf5.5_py3.13_env\\Scripts\\python.exe' : null,
+        'python3',
         'python',
         'py'
       ].filter(Boolean);
