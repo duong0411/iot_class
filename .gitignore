@@ -75,6 +75,7 @@ __pycache__/
 # ESP-IDF / firmware build trees (if nested)
 **/build/
 **/sdkconfig.old
+**/.git.bak/
 
 # Node backend
 backend/node_modules/
