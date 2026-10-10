@@ -25,6 +25,23 @@ class DeviceProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   static const String _cacheKeyPrefix = 'classroom_cache_';
 
+  /// Firmware classroom dùng RELAY_ON=HIGH nhưng module relay thực tế active-LOW
+  /// (GPIO HIGH = tắt tải, GPIO LOW = bật tải). Không sửa được firmware đã gửi đi
+  /// nên app đảo lệnh MQTT + telemetry để công tắc khớp đèn/quạt thật.
+  static const bool _classroomRelayActiveLow = true;
+
+  /// UI muốn BẬT/TẮT → chuỗi gửi xuống `cmnd/classroom_*/POWER`.
+  String _classroomRelayCmd(bool wantOn) {
+    if (!_classroomRelayActiveLow) return wantOn ? 'ON' : 'OFF';
+    return wantOn ? 'OFF' : 'ON';
+  }
+
+  /// Telemetry firmware `ON`/`OFF` (theo mức GPIO) → trạng thái UI (đèn/quạt thật).
+  bool _classroomRelayUiOn(String valStr) {
+    final pinOn = valStr == 'ON' || valStr == '1' || valStr == 'TRUE';
+    return _classroomRelayActiveLow ? !pinOn : pinOn;
+  }
+
   DeviceProvider() {
     _init();
   }
@@ -291,14 +308,14 @@ class DeviceProvider extends ChangeNotifier with WidgetsBindingObserver {
       final lastLock = _userActionLock['led'];
       if (lastLock == null || DateTime.now().difference(lastLock).inMilliseconds > 1800) {
         final valStr = value.toString().toUpperCase();
-        classroomLedState = (valStr == 'ON' || valStr == '1' || valStr == 'TRUE');
+        classroomLedState = _classroomRelayUiOn(valStr);
         classroomStateChanged = true;
       }
     } else if (topic.contains('classroom_fan')) {
       final lastLock = _userActionLock['fan'];
       if (lastLock == null || DateTime.now().difference(lastLock).inMilliseconds > 1800) {
         final valStr = value.toString().toUpperCase();
-        classroomFanState = (valStr == 'ON' || valStr == '1' || valStr == 'TRUE');
+        classroomFanState = _classroomRelayUiOn(valStr);
         classroomStateChanged = true;
       }
     } else if (topic.contains('classroom_door')) {
@@ -376,7 +393,11 @@ class DeviceProvider extends ChangeNotifier with WidgetsBindingObserver {
   void toggleClassroomLed() {
     classroomLedState = !classroomLedState;
     _userActionLock['led'] = DateTime.now();
-    _mqttService.publish('cmnd/classroom_led/POWER', classroomLedState ? "ON" : "OFF", qos: MqttQos.atMostOnce);
+    _mqttService.publish(
+      'cmnd/classroom_led/POWER',
+      _classroomRelayCmd(classroomLedState),
+      qos: MqttQos.atMostOnce,
+    );
     _saveCachedState();
     notifyListeners();
   }
@@ -384,7 +405,11 @@ class DeviceProvider extends ChangeNotifier with WidgetsBindingObserver {
   void toggleClassroomFan() {
     classroomFanState = !classroomFanState;
     _userActionLock['fan'] = DateTime.now();
-    _mqttService.publish('cmnd/classroom_fan/POWER', classroomFanState ? "ON" : "OFF", qos: MqttQos.atMostOnce);
+    _mqttService.publish(
+      'cmnd/classroom_fan/POWER',
+      _classroomRelayCmd(classroomFanState),
+      qos: MqttQos.atMostOnce,
+    );
     _saveCachedState();
     notifyListeners();
   }

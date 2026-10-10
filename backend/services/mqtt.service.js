@@ -282,9 +282,10 @@ class MqttService {
         ? 'Ánh sáng Tốt (Đủ sáng ☀️)'
         : 'Ánh sáng Yếu (Trời tối/Che tay 🌙)';
     } else if (topic.includes('classroom_led')) {
-      this.envCache.led = (valStr.toUpperCase() === 'ON') ? 'ON' : 'OFF';
+      // Active-LOW: tele ON (GPIO HIGH) = đèn TẮT thực tế
+      this.envCache.led = (valStr.toUpperCase() === 'ON') ? 'OFF' : 'ON';
     } else if (topic.includes('classroom_fan')) {
-      this.envCache.fan = (valStr.toUpperCase() === 'ON') ? 'ON' : 'OFF';
+      this.envCache.fan = (valStr.toUpperCase() === 'ON') ? 'OFF' : 'ON';
     } else if (topic.includes('classroom_door')) {
       this.envCache.door = (valStr === '90' || valStr.toUpperCase() === 'ON' || valStr.toUpperCase() === 'OPEN')
         ? 'Mở (90°)'

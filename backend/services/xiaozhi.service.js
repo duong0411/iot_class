@@ -178,14 +178,19 @@ class XiaoZhiService {
     let mqttTopic = '';
     let mqttValue = '';
 
+    // Relay classroom active-LOW: muốn BẬT tải → gửi OFF (GPIO LOW), muốn TẮT → gửi ON.
+    const relayCmd = (wantOn) => (wantOn ? 'OFF' : 'ON');
+
     if (toolName === 'control_light') {
-      mqttValue = args.state === 'ON' ? 'ON' : 'OFF';
+      const wantOn = args.state === 'ON';
+      mqttValue = relayCmd(wantOn);
       mqttTopic = 'cmnd/classroom_led/POWER';
-      responseText = `Đã ${mqttValue === 'ON' ? 'bật' : 'tắt'} đèn.`;
+      responseText = `Đã ${wantOn ? 'bật' : 'tắt'} đèn.`;
     } else if (toolName === 'control_fan') {
-      mqttValue = args.state === 'ON' ? 'ON' : 'OFF';
+      const wantOn = args.state === 'ON';
+      mqttValue = relayCmd(wantOn);
       mqttTopic = 'cmnd/classroom_fan/POWER';
-      responseText = `Đã ${mqttValue === 'ON' ? 'bật' : 'tắt'} quạt.`;
+      responseText = `Đã ${wantOn ? 'bật' : 'tắt'} quạt.`;
     } else if (toolName === 'control_door') {
       if (args.mode === 'open') mqttValue = '90';
       else if (args.mode === 'close') mqttValue = '0';
@@ -201,10 +206,11 @@ class XiaoZhiService {
       const cache = mqttService.envCache;
       responseText = `Thông số môi trường: Nhiệt độ ${cache.temp}°C, Độ ẩm ${cache.humi}%, ${cache.light}, Đèn ${cache.led}, Quạt ${cache.fan}, Cửa ${cache.door}, Chế độ ${cache.mode}.`;
     } else if (toolName === 'control_all_devices') {
-      const state = args.state === 'ON' ? 'ON' : 'OFF';
+      const wantOn = args.state === 'ON';
+      const state = relayCmd(wantOn);
       mqttService.publish('cmnd/classroom_led/POWER', state);
       mqttService.publish('cmnd/classroom_fan/POWER', state);
-      responseText = `Đã ${state === 'ON' ? 'bật' : 'tắt'} toàn bộ thiết bị.`;
+      responseText = `Đã ${wantOn ? 'bật' : 'tắt'} toàn bộ thiết bị.`;
       return responseText;
     }
 
