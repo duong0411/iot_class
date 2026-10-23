@@ -133,7 +133,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ).animate(delay: 200.ms).fadeIn().slideY(begin: 0.2),
                       SizedBox(height: R.sp(context, 8)),
                       Text(
-                        'Đăng nhập trên thiết bị (local)',
+                        'Đăng nhập qua duynguyen.io.vn',
                         style: TextStyle(
                           color: AppTheme.textSecondary,
                           fontSize: R.fs(context, 13),

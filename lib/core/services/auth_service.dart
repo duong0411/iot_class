@@ -1,21 +1,15 @@
 import 'dart:convert';
-import 'dart:io';
-import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 
-/// Local-only auth — users stored on device via SharedPreferences.
+/// Auth qua tunnel Cloudflare. /api/auth trên duynguyen.io.vn vào backend
+/// dùng chung MongoDB alot_db với classroom-backend.
 class AuthService {
   static const _sessionTokenKey = 'auth_token';
   static const _sessionUserKey = 'user_data';
 
-  /// Docker classroom-backend. Máy Android giả lập dùng 10.0.2.2, iOS giả lập dùng 127.0.0.1.
-  static String get apiRoot {
-    if (kIsWeb) return 'http://127.0.0.1:3001/api';
-    if (Platform.isAndroid) return 'http://10.0.2.2:3001/api';
-    return 'http://127.0.0.1:3001/api';
-  }
+  static const String apiRoot = 'https://duynguyen.io.vn/api';
 
   String? _token;
   String? get token => _token;
