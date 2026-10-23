@@ -26,14 +26,13 @@ class _SplashScreenState extends State<SplashScreen> {
     await Future.delayed(const Duration(milliseconds: 1500));
     if (!mounted) return;
 
-    // Tự động vào thẳng HomeScreen không qua màn hình Đăng Nhập
     final authProvider = context.read<AuthProvider>();
-    await authProvider.checkAuthStatus();
+    final signedIn = await authProvider.checkAuthStatus();
 
     if (mounted) {
       Navigator.of(context).pushReplacement(
         PageRouteBuilder(
-          pageBuilder: (_, __, ___) => const HomeScreen(),
+          pageBuilder: (_, __, ___) => signedIn ? const HomeScreen() : const LoginScreen(),
           transitionDuration: const Duration(milliseconds: 800),
           transitionsBuilder: (_, animation, __, child) =>
               FadeTransition(opacity: animation, child: child),

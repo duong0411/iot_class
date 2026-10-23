@@ -1,0 +1,13 @@
+node_modules
+npm-debug.log
+.git
+.gitignore
+.env
+xiaozhi-esp32
+tests
+test-results
+test_*.js
+trigger_test.js
+publish_test_schedule.js
+*.md
+.DS_Store

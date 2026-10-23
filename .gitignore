@@ -97,3 +97,5 @@ android/app/google-services.json
 *.ogg
 *.wav
 backend/public/audio/
+
+SmartHome_ESP32/tools/arduino-cli.exe

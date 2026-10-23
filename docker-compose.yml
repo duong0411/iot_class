@@ -1,0 +1,31 @@
+# Chỉ backend LỚP HỌC — không đụng stack nhà (alot-backend / alot-mongodb)
+# App & tunnel dùng chung domain duynguyen.io.vn, tách bằng PATH (xem cloudflare/SETUP.md)
+services:
+  classroom-backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: duong0411/classroom-backend:latest
+    container_name: classroom-backend
+    restart: unless-stopped
+    ports:
+      - "3001:3001"   # HTTP + Opus WebSocket /ws
+    env_file:
+      - ./backend/.env
+    environment:
+      - PORT=3001
+      # Mosquitto đang chạy trên Windows host (cùng MQTT nhà đang dùng)
+      - MQTT_URL=mqtt://host.docker.internal:1883
+      - SERVER_BASE_URL=https://duynguyen.io.vn
+      - MQTT_PUBLIC_HOST=mqtt.duynguyen.io.vn
+      - MQTT_PUBLIC_PORT=443
+      # Token lớp học lấy từ backend/.env (XIAOZHI_MCP_URL)
+    volumes:
+      # Giữ file TTS / MP3 lịch giữa các lần restart
+      - classroom_audio:/usr/src/app/public/audio
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  classroom_audio:
+    driver: local

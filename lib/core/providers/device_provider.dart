@@ -24,23 +24,7 @@ class DeviceProvider extends ChangeNotifier with WidgetsBindingObserver {
   bool get isMqttConnected => _mqttService.isConnected;
 
   static const String _cacheKeyPrefix = 'classroom_cache_';
-
-  /// Firmware classroom dùng RELAY_ON=HIGH nhưng module relay thực tế active-LOW
-  /// (GPIO HIGH = tắt tải, GPIO LOW = bật tải). Không sửa được firmware đã gửi đi
-  /// nên app đảo lệnh MQTT + telemetry để công tắc khớp đèn/quạt thật.
-  static const bool _classroomRelayActiveLow = true;
-
-  /// UI muốn BẬT/TẮT → chuỗi gửi xuống `cmnd/classroom_*/POWER`.
-  String _classroomRelayCmd(bool wantOn) {
-    if (!_classroomRelayActiveLow) return wantOn ? 'ON' : 'OFF';
-    return wantOn ? 'OFF' : 'ON';
-  }
-
-  /// Telemetry firmware `ON`/`OFF` (theo mức GPIO) → trạng thái UI (đèn/quạt thật).
-  bool _classroomRelayUiOn(String valStr) {
-    final pinOn = valStr == 'ON' || valStr == '1' || valStr == 'TRUE';
-    return _classroomRelayActiveLow ? !pinOn : pinOn;
-  }
+  static const String classroomChip = 'CLASSROOM_02';
 
   DeviceProvider() {
     _init();
@@ -61,11 +45,21 @@ class DeviceProvider extends ChangeNotifier with WidgetsBindingObserver {
       classroomTemp = prefs.getDouble('${_cacheKeyPrefix}temp') ?? classroomTemp;
       classroomHumi = prefs.getDouble('${_cacheKeyPrefix}humi') ?? classroomHumi;
       classroomLightStatus = prefs.getString('${_cacheKeyPrefix}light') ?? classroomLightStatus;
+      classroomLightPercent = prefs.getInt('${_cacheKeyPrefix}light_pct') ?? classroomLightPercent;
       classroomFanState = prefs.getBool('${_cacheKeyPrefix}fan') ?? classroomFanState;
       classroomLedState = prefs.getBool('${_cacheKeyPrefix}led') ?? classroomLedState;
+      classroomLedMode = prefs.getString('${_cacheKeyPrefix}led_mode') ?? classroomLedMode;
+      classroomFanMode = prefs.getString('${_cacheKeyPrefix}fan_mode') ?? classroomFanMode;
+      classroomLedReason = prefs.getString('${_cacheKeyPrefix}led_reason') ?? classroomLedReason;
+      classroomFanReason = prefs.getString('${_cacheKeyPrefix}fan_reason') ?? classroomFanReason;
+      classroomGas = prefs.getBool('${_cacheKeyPrefix}gas') ?? classroomGas;
+      classroomFire = prefs.getBool('${_cacheKeyPrefix}fire') ?? classroomFire;
       classroomDoorState = prefs.getBool('${_cacheKeyPrefix}door') ?? classroomDoorState;
       classroomDoorAngle = prefs.getDouble('${_cacheKeyPrefix}door_angle') ?? classroomDoorAngle;
-      classroomMode = prefs.getString('${_cacheKeyPrefix}mode') ?? classroomMode;
+      classroomLastUid = prefs.getString('${_cacheKeyPrefix}uid') ?? classroomLastUid;
+      if (prefs.containsKey('${_cacheKeyPrefix}body')) {
+        classroomBody = prefs.getDouble('${_cacheKeyPrefix}body');
+      }
       final lastMs = prefs.getInt('${_cacheKeyPrefix}last_time');
       if (lastMs != null) {
         lastClassroomDataTime = DateTime.fromMillisecondsSinceEpoch(lastMs);
@@ -80,11 +74,21 @@ class DeviceProvider extends ChangeNotifier with WidgetsBindingObserver {
       await prefs.setDouble('${_cacheKeyPrefix}temp', classroomTemp);
       await prefs.setDouble('${_cacheKeyPrefix}humi', classroomHumi);
       await prefs.setString('${_cacheKeyPrefix}light', classroomLightStatus);
+      await prefs.setInt('${_cacheKeyPrefix}light_pct', classroomLightPercent);
       await prefs.setBool('${_cacheKeyPrefix}fan', classroomFanState);
       await prefs.setBool('${_cacheKeyPrefix}led', classroomLedState);
+      await prefs.setString('${_cacheKeyPrefix}led_mode', classroomLedMode);
+      await prefs.setString('${_cacheKeyPrefix}fan_mode', classroomFanMode);
+      await prefs.setString('${_cacheKeyPrefix}led_reason', classroomLedReason);
+      await prefs.setString('${_cacheKeyPrefix}fan_reason', classroomFanReason);
+      await prefs.setBool('${_cacheKeyPrefix}gas', classroomGas);
+      await prefs.setBool('${_cacheKeyPrefix}fire', classroomFire);
       await prefs.setBool('${_cacheKeyPrefix}door', classroomDoorState);
       await prefs.setDouble('${_cacheKeyPrefix}door_angle', classroomDoorAngle);
-      await prefs.setString('${_cacheKeyPrefix}mode', classroomMode);
+      await prefs.setString('${_cacheKeyPrefix}uid', classroomLastUid);
+      if (classroomBody != null) {
+        await prefs.setDouble('${_cacheKeyPrefix}body', classroomBody!);
+      }
       if (lastClassroomDataTime != null) {
         await prefs.setInt('${_cacheKeyPrefix}last_time', lastClassroomDataTime!.millisecondsSinceEpoch);
       }
@@ -194,13 +198,24 @@ class DeviceProvider extends ChangeNotifier with WidgetsBindingObserver {
   // Classroom State Variables
   double classroomTemp = 0.0;
   double classroomHumi = 0.0;
-  String classroomLightStatus = "Tot";
+  String classroomLightStatus = 'Đang đọc';
+  bool classroomLightDark = false;
+  int classroomLightPercent = 0;
   bool classroomFanState = false;
   bool classroomLedState = false;
+  String classroomLedMode = 'AUTO';
+  String classroomFanMode = 'AUTO';
+  String classroomLedReason = 'Đang chờ cảm biến quang';
+  String classroomFanReason = 'Đang chờ DHT11';
+  bool classroomGas = false;
+  bool classroomFire = false;
+  double? classroomBody;
+  String classroomLastUid = '';
+  String classroomRfidResult = '';
   bool classroomDoorState = false;
   double classroomDoorAngle = 0.0;
-  String classroomMode = "AUTO"; // "AUTO" hoặc "MANUAL"
-  bool get isClassroomAutoMode => classroomMode == "AUTO";
+  bool get isLedAuto => classroomLedMode == 'AUTO';
+  bool get isFanAuto => classroomFanMode == 'AUTO';
   StudentProvider? studentProvider;
 
   bool isClassroomDeviceOnline = false;
@@ -226,9 +241,24 @@ class DeviceProvider extends ChangeNotifier with WidgetsBindingObserver {
     });
   }
 
+  bool _locked(String key) {
+    final lastLock = _userActionLock[key];
+    return lastLock != null && DateTime.now().difference(lastLock).inMilliseconds <= 1800;
+  }
+
+  bool _isOnValue(dynamic value) {
+    final s = value.toString().toUpperCase();
+    return s == 'ON' || s == '1' || s == 'TRUE' || s == 'OPEN';
+  }
+
+  String _modeValue(dynamic value) {
+    return value.toString().toUpperCase().contains('MANUAL') ? 'MANUAL' : 'AUTO';
+  }
+
   void _handleMqttMessage(String topic, String payload) {
-    // Handle CLASSROOM_01 LWT and telemetry status
-    if (topic.contains("CLASSROOM_01") || topic.contains("classroom")) {
+    final topicKey = topic.toLowerCase();
+    final isClassroomTopic = topicKey.contains('classroom_02') || topicKey.contains('classroom');
+    if (isClassroomTopic) {
       if (payload == "offline") {
         isClassroomDeviceOnline = false;
         notifyListeners();
@@ -274,63 +304,79 @@ class DeviceProvider extends ChangeNotifier with WidgetsBindingObserver {
     value ??= payload.trim();
 
     bool classroomStateChanged = false;
+    final t = topic.toLowerCase();
 
-    // Handle ESP32 Smart Classroom Specific Topics
-    if (topic.contains('classroom_temp')) {
+    if (t.contains('classroom_02_temp') || t.contains('classroom_temp')) {
       final parsed = (value is num) ? value.toDouble() : double.tryParse(value.toString());
       if (parsed != null) {
         classroomTemp = parsed;
         classroomStateChanged = true;
       }
-    } else if (topic.contains('classroom_humi')) {
+    } else if (t.contains('classroom_02_humi') || t.contains('classroom_humi')) {
       final parsed = (value is num) ? value.toDouble() : double.tryParse(value.toString());
       if (parsed != null) {
         classroomHumi = parsed;
         classroomStateChanged = true;
       }
-    } else if (topic.contains('classroom_light')) {
-      final str = value.toString().trim();
-      if (str == 'Tot' || str.toUpperCase() == 'LOW' || str == '0' || str.toUpperCase() == 'SÁNG') {
-        classroomLightStatus = 'Tốt ☀️';
-      } else if (str == 'Yeu' || str.toUpperCase() == 'HIGH' || str == '1' || str.toUpperCase() == 'TỐI') {
-        classroomLightStatus = 'Yếu 🌙';
-      } else {
-        classroomLightStatus = str;
-      }
+    } else if (t.contains('classroom_02_light') || t.contains('classroom_light')) {
+      final state = (jsonData?['state'] ?? value).toString().toUpperCase();
+      final pct = (value is num) ? value.toInt() : int.tryParse(value.toString());
+      final dark = state == 'DARK' || pct == 0;
+      classroomLightDark = dark;
+      classroomLightPercent = dark ? 0 : (pct ?? 100);
+      classroomLightStatus = dark ? 'Tối' : 'Sáng';
       classroomStateChanged = true;
-    } else if (topic.contains('classroom_mode')) {
-      final lastLock = _userActionLock['mode'];
-      if (lastLock == null || DateTime.now().difference(lastLock).inMilliseconds > 1800) {
-        classroomMode = value.toString().toUpperCase().contains('MANUAL') ? 'MANUAL' : 'AUTO';
+    } else if (t.contains('classroom_02_led_mode')) {
+      if (!_locked('led_mode')) {
+        classroomLedMode = _modeValue(value);
         classroomStateChanged = true;
       }
-    } else if (topic.contains('classroom_led')) {
-      final lastLock = _userActionLock['led'];
-      if (lastLock == null || DateTime.now().difference(lastLock).inMilliseconds > 1800) {
-        final valStr = value.toString().toUpperCase();
-        classroomLedState = _classroomRelayUiOn(valStr);
+    } else if (t.contains('classroom_02_fan_mode')) {
+      if (!_locked('fan_mode')) {
+        classroomFanMode = _modeValue(value);
         classroomStateChanged = true;
       }
-    } else if (topic.contains('classroom_fan')) {
-      final lastLock = _userActionLock['fan'];
-      if (lastLock == null || DateTime.now().difference(lastLock).inMilliseconds > 1800) {
-        final valStr = value.toString().toUpperCase();
-        classroomFanState = _classroomRelayUiOn(valStr);
+    } else if (t.contains('classroom_02_led') || t.contains('classroom_led')) {
+      if (!_locked('led')) {
+        classroomLedState = _isOnValue(value);
+        if (jsonData?['mode'] != null) classroomLedMode = _modeValue(jsonData!['mode']);
+        if (jsonData?['reason'] != null) classroomLedReason = jsonData!['reason'].toString();
         classroomStateChanged = true;
       }
-    } else if (topic.contains('classroom_door')) {
-      final lastLock = _userActionLock['door'];
-      if (lastLock == null || DateTime.now().difference(lastLock).inMilliseconds > 1800) {
+    } else if (t.contains('classroom_02_fan') || t.contains('classroom_fan')) {
+      if (!_locked('fan')) {
+        classroomFanState = _isOnValue(value);
+        if (jsonData?['mode'] != null) classroomFanMode = _modeValue(jsonData!['mode']);
+        if (jsonData?['reason'] != null) classroomFanReason = jsonData!['reason'].toString();
+        classroomStateChanged = true;
+      }
+    } else if (t.contains('classroom_02_door') || t.contains('classroom_door')) {
+      if (!_locked('door')) {
         final angle = (value is num) ? value.toDouble() : double.tryParse(value.toString()) ?? 0;
         classroomDoorAngle = angle;
-        final valStr = value.toString().toUpperCase();
-        classroomDoorState = angle > 0 || valStr == 'ON' || valStr == 'OPEN' || valStr == 'TRUE';
+        classroomDoorState = angle > 0 || _isOnValue(value);
         classroomStateChanged = true;
       }
-    } else if (topic.contains('classroom_rfid')) {
+    } else if (t.contains('classroom_02_body') || t.contains('classroom_body')) {
+      final parsed = (value is num) ? value.toDouble() : double.tryParse(value.toString());
+      if (parsed != null) {
+        classroomBody = parsed;
+        classroomStateChanged = true;
+      }
+    } else if (t.contains('classroom_02_gas') || t.contains('classroom_gas')) {
+      classroomGas = _isOnValue(value);
+      classroomStateChanged = true;
+    } else if (t.contains('classroom_02_fire') || t.contains('classroom_fire')) {
+      classroomFire = _isOnValue(value);
+      classroomStateChanged = true;
+    } else if (t.contains('classroom_02_rfid') || t.contains('classroom_rfid')) {
       final rfidUid = (jsonData != null && jsonData['uid'] != null)
           ? jsonData['uid'].toString()
           : value.toString();
+      classroomLastUid = rfidUid;
+      classroomRfidResult = (jsonData?['result'] ?? '').toString();
+      final body = jsonData?['body'];
+      if (body is num) classroomBody = body.toDouble();
       if (rfidUid.isNotEmpty && rfidUid != 'online' && studentProvider != null) {
         studentProvider!.handleRFIDScanned(rfidUid);
       }
@@ -382,20 +428,29 @@ class DeviceProvider extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   // ─── Actions: Smart Classroom ESP32 ─────────────────────────────────────
-  void toggleClassroomMode() {
-    classroomMode = (classroomMode == "AUTO") ? "MANUAL" : "AUTO";
-    _userActionLock['mode'] = DateTime.now();
-    _mqttService.publish('cmnd/classroom_mode/POWER', classroomMode, qos: MqttQos.atMostOnce);
+  void setClassroomLedMode(bool auto) {
+    classroomLedMode = auto ? 'AUTO' : 'MANUAL';
+    _userActionLock['led_mode'] = DateTime.now();
+    _mqttService.publish('cmnd/${classroomChip}_led_mode/POWER', classroomLedMode, qos: MqttQos.atMostOnce);
+    _saveCachedState();
+    notifyListeners();
+  }
+
+  void setClassroomFanMode(bool auto) {
+    classroomFanMode = auto ? 'AUTO' : 'MANUAL';
+    _userActionLock['fan_mode'] = DateTime.now();
+    _mqttService.publish('cmnd/${classroomChip}_fan_mode/POWER', classroomFanMode, qos: MqttQos.atMostOnce);
     _saveCachedState();
     notifyListeners();
   }
 
   void toggleClassroomLed() {
     classroomLedState = !classroomLedState;
+    classroomLedMode = 'MANUAL';
     _userActionLock['led'] = DateTime.now();
     _mqttService.publish(
-      'cmnd/classroom_led/POWER',
-      _classroomRelayCmd(classroomLedState),
+      'cmnd/${classroomChip}_led/POWER',
+      classroomLedState ? 'ON' : 'OFF',
       qos: MqttQos.atMostOnce,
     );
     _saveCachedState();
@@ -404,10 +459,11 @@ class DeviceProvider extends ChangeNotifier with WidgetsBindingObserver {
 
   void toggleClassroomFan() {
     classroomFanState = !classroomFanState;
+    classroomFanMode = 'MANUAL';
     _userActionLock['fan'] = DateTime.now();
     _mqttService.publish(
-      'cmnd/classroom_fan/POWER',
-      _classroomRelayCmd(classroomFanState),
+      'cmnd/${classroomChip}_fan/POWER',
+      classroomFanState ? 'ON' : 'OFF',
       qos: MqttQos.atMostOnce,
     );
     _saveCachedState();
@@ -418,7 +474,7 @@ class DeviceProvider extends ChangeNotifier with WidgetsBindingObserver {
     classroomDoorState = !classroomDoorState;
     classroomDoorAngle = classroomDoorState ? 90.0 : 0.0;
     _userActionLock['door'] = DateTime.now();
-    _mqttService.publish('cmnd/classroom_door/POWER', classroomDoorState ? "ON" : "OFF", qos: MqttQos.atMostOnce);
+    _mqttService.publish('cmnd/${classroomChip}_door/POWER', classroomDoorState ? 'OPEN' : 'CLOSE', qos: MqttQos.atMostOnce);
     _saveCachedState();
     notifyListeners();
   }

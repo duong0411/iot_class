@@ -17,16 +17,16 @@ class AuthProvider extends ChangeNotifier {
   final AuthService _authService = AuthService();
 
   Future<bool> checkAuthStatus() async {
-    _status = AuthStatus.authenticated;
-    _user = UserModel(
-      id: 'teacher_01',
-      name: 'Giáo Viên Lớp Học',
-      email: 'teacher@smartclassroom.edu.vn',
-      phone: '0901234567',
-      createdAt: DateTime.now(),
-    );
+    final saved = await _authService.loadSavedUser();
+    if (saved != null) {
+      _user = saved;
+      _status = AuthStatus.authenticated;
+      notifyListeners();
+      return true;
+    }
+    _status = AuthStatus.unauthenticated;
     notifyListeners();
-    return true;
+    return false;
   }
 
   Future<void> logout() async {
@@ -55,7 +55,7 @@ class AuthProvider extends ChangeNotifier {
       return false;
     } catch (e) {
       _status = AuthStatus.unauthenticated;
-      _errorMessage = 'Đăng nhập thất bại. Vui lòng thử lại!';
+      _errorMessage = e.toString().replaceFirst('Exception: ', '');
       notifyListeners();
       return false;
     }

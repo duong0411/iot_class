@@ -9,10 +9,15 @@ class MqttService {
       temp: 0.0,
       humi: 0.0,
       light: "Đang đọc...",
+      body: "--",
       led: "OFF",
       fan: "OFF",
+      ledMode: "AUTO",
+      fanMode: "AUTO",
       door: "Đóng (0°)",
-      mode: "AUTO (Tự động theo cảm biến)"
+      gas: "OFF",
+      fire: "OFF",
+      mode: "AUTO"
     };
     this.schedules = [
       { id: 'sched_morning', hour: 7, minute: 45, prompt: 'Đã đến giờ truy bài, các bạn học sinh chuẩn bị vào lớp!', enabled: true, action: 'NONE', lastTriggeredDay: -1 },
@@ -53,14 +58,20 @@ class MqttService {
     if (!this.client) return;
 
     const topicsToSubscribe = [
-      'tele/classroom_temp/status',
-      'tele/classroom_humi/status',
-      'tele/classroom_light/status',
-      'tele/classroom_led/status',
-      'tele/classroom_fan/status',
-      'tele/classroom_door/status',
-      'tele/classroom_rfid/status',
-      'tele/classroom_mode/status',
+      'tele/CLASSROOM_02/status',
+      'tele/CLASSROOM_02_temp/status',
+      'tele/CLASSROOM_02_humi/status',
+      'tele/CLASSROOM_02_light/status',
+      'tele/CLASSROOM_02_led/status',
+      'tele/CLASSROOM_02_fan/status',
+      'tele/CLASSROOM_02_led_mode/status',
+      'tele/CLASSROOM_02_fan_mode/status',
+      'tele/CLASSROOM_02_door/status',
+      'tele/CLASSROOM_02_rfid/status',
+      'tele/CLASSROOM_02_body/status',
+      'tele/CLASSROOM_02_gas/status',
+      'tele/CLASSROOM_02_fire/status',
+      'tele/CLASSROOM_02_alarm/status',
       'cmnd/classroom_schedule/set',
       'cmnd/classroom_schedule/delete',
       'cmnd/xiaozhi_tts/say',
@@ -272,28 +283,36 @@ class MqttService {
       valStr = payloadStr;
     }
 
-    // --- Cập nhật Cache Telemetry Lớp Học cho XiaoZhi MCP ---
-    if (topic.includes('classroom_temp')) {
+    const topicKey = topic.toLowerCase();
+    const on = valStr.toUpperCase() === 'ON' || valStr === '1';
+    if (topicKey.includes('classroom_02_temp')) {
       this.envCache.temp = parseFloat(valStr) || this.envCache.temp;
-    } else if (topic.includes('classroom_humi')) {
+    } else if (topicKey.includes('classroom_02_humi')) {
       this.envCache.humi = parseFloat(valStr) || this.envCache.humi;
-    } else if (topic.includes('classroom_light')) {
-      this.envCache.light = (valStr === 'Tot' || valStr === 'SÁNG')
-        ? 'Ánh sáng Tốt (Đủ sáng ☀️)'
-        : 'Ánh sáng Yếu (Trời tối/Che tay 🌙)';
-    } else if (topic.includes('classroom_led')) {
-      // Active-LOW: tele ON (GPIO HIGH) = đèn TẮT thực tế
-      this.envCache.led = (valStr.toUpperCase() === 'ON') ? 'OFF' : 'ON';
-    } else if (topic.includes('classroom_fan')) {
-      this.envCache.fan = (valStr.toUpperCase() === 'ON') ? 'OFF' : 'ON';
-    } else if (topic.includes('classroom_door')) {
-      this.envCache.door = (valStr === '90' || valStr.toUpperCase() === 'ON' || valStr.toUpperCase() === 'OPEN')
-        ? 'Mở (90°)'
-        : 'Đóng (0°)';
-    } else if (topic.includes('classroom_mode')) {
-      this.envCache.mode = (valStr.toUpperCase() === 'MANUAL')
-        ? 'MANUAL (Thủ công qua App/Giọng nói)'
-        : 'AUTO (Tự động theo cảm biến)';
+    } else if (topicKey.includes('classroom_02_light')) {
+      const pct = Number(valStr);
+      this.envCache.light = pct <= 0 ? '0% tối, dưới 40%' : `${Number.isFinite(pct) ? pct : 100}% sáng, từ 45%`;
+    } else if (topicKey.includes('classroom_02_body')) {
+      this.envCache.body = `${valStr}°C`;
+    } else if (topicKey.includes('classroom_02_led_mode')) {
+      this.envCache.ledMode = valStr.toUpperCase().includes('MANUAL') ? 'MANUAL' : 'AUTO';
+    } else if (topicKey.includes('classroom_02_fan_mode')) {
+      this.envCache.fanMode = valStr.toUpperCase().includes('MANUAL') ? 'MANUAL' : 'AUTO';
+    } else if (topicKey.includes('classroom_02_led')) {
+      this.envCache.led = on ? 'ON' : 'OFF';
+    } else if (topicKey.includes('classroom_02_fan')) {
+      this.envCache.fan = on ? 'ON' : 'OFF';
+    } else if (topicKey.includes('classroom_02_door')) {
+      const angle = parseFloat(valStr);
+      this.envCache.door = (angle > 0 || on) ? `Mở (${Number.isFinite(angle) ? angle : 90}°)` : 'Đóng (0°)';
+    } else if (topicKey.includes('classroom_02_gas')) {
+      this.envCache.gas = on ? 'ON' : 'OFF';
+      if (on) console.log('🚨 [CẢNH BÁO] CO2 / gas lớp học');
+    } else if (topicKey.includes('classroom_02_fire')) {
+      this.envCache.fire = on ? 'ON' : 'OFF';
+      if (on) console.log('🚨 [CẢNH BÁO] Cháy lớp học');
+    } else if (topicKey.includes('classroom_02_alarm') && on) {
+      console.log(`🚨 [CẢNH BÁO] ${payloadStr}`);
     }
 
     console.log(`📥 [MQTT Telemetry Cache Update] ${topic} -> ${valStr}`);

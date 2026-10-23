@@ -2,7 +2,7 @@ const WebSocket = require('ws');
 const mqttService = require('./mqtt.service');
 
 // XIAOZHI MCP ENDPOINT (WebSockets Client MCP Endpoint)
-const XIAOZHI_URL = process.env.XIAOZHI_MCP_URL || "wss://api.xiaozhi.me/mcp/?token=eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjg4MzEwMiwiYWdlbnRJZCI6MjE5MDk4MSwiZW5kcG9pbnRJZCI6ImFnZW50XzIxOTA5ODEiLCJwdXJwb3NlIjoibWNwLWVuZHBvaW50IiwiaWF0IjoxNzg1Njg2MDY4LCJleHAiOjE4MTcyNDM2Njh9.mA4TgMiFd3et8bjKDcVSquDsw-FXL42XYgXVKmNygAo_F9TWG_QYgA1P32i5QfOWx3rdWhyGWi4boK7U4eLvpw";
+const XIAOZHI_URL = process.env.XIAOZHI_MCP_URL || "wss://api.xiaozhi.me/mcp/?token=eyJhbGciOiJFUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOjg4MzEwMiwiYWdlbnRJZCI6MjUyNzU3MSwiZW5kcG9pbnRJZCI6ImFnZW50XzI1Mjc1NzEiLCJwdXJwb3NlIjoibWNwLWVuZHBvaW50IiwiaWF0IjoxNzkyNzY1ODk5LCJleHAiOjE4MjQzMjM0OTl9.P0NsBdqh314qccpAnflMqDT-hRk7VEoKfberHb3Gfa1VC9fOPKksZ0o1yIrZUgQvLNfPj8CqT2se3R2eA9QbbA";
 
 class XiaoZhiService {
   constructor() {
@@ -178,39 +178,46 @@ class XiaoZhiService {
     let mqttTopic = '';
     let mqttValue = '';
 
-    // Relay classroom active-LOW: muốn BẬT tải → gửi OFF (GPIO LOW), muốn TẮT → gửi ON.
-    const relayCmd = (wantOn) => (wantOn ? 'OFF' : 'ON');
-
+    // Firmware CLASSROOM_02 tự đảo relay active-LOW. MCP gửi ON/OFF đúng nghĩa thật.
     if (toolName === 'control_light') {
       const wantOn = args.state === 'ON';
-      mqttValue = relayCmd(wantOn);
-      mqttTopic = 'cmnd/classroom_led/POWER';
-      responseText = `Đã ${wantOn ? 'bật' : 'tắt'} đèn.`;
+      mqttValue = wantOn ? 'ON' : 'OFF';
+      mqttTopic = 'cmnd/CLASSROOM_02_led/POWER';
+      responseText = `Đã ${wantOn ? 'bật' : 'tắt'} đèn và chuyển đèn sang thủ công.`;
     } else if (toolName === 'control_fan') {
       const wantOn = args.state === 'ON';
-      mqttValue = relayCmd(wantOn);
-      mqttTopic = 'cmnd/classroom_fan/POWER';
-      responseText = `Đã ${wantOn ? 'bật' : 'tắt'} quạt.`;
+      mqttValue = wantOn ? 'ON' : 'OFF';
+      mqttTopic = 'cmnd/CLASSROOM_02_fan/POWER';
+      responseText = `Đã ${wantOn ? 'bật' : 'tắt'} quạt và chuyển quạt sang thủ công.`;
+    } else if (toolName === 'set_light_mode') {
+      mqttValue = args.mode === 'MANUAL' ? 'MANUAL' : 'AUTO';
+      mqttTopic = 'cmnd/CLASSROOM_02_led_mode/POWER';
+      responseText = `Đèn chuyển ${mqttValue}. Tự động bật khi tối dưới 40% và tắt từ 45%.`;
+    } else if (toolName === 'set_fan_mode') {
+      mqttValue = args.mode === 'MANUAL' ? 'MANUAL' : 'AUTO';
+      mqttTopic = 'cmnd/CLASSROOM_02_fan_mode/POWER';
+      responseText = `Quạt chuyển ${mqttValue}. Tự động bật trên 30 độ hoặc có gas, tắt từ 29.5 độ.`;
     } else if (toolName === 'control_door') {
-      if (args.mode === 'open') mqttValue = '90';
-      else if (args.mode === 'close') mqttValue = '0';
+      if (args.mode === 'open') mqttValue = 'OPEN';
+      else if (args.mode === 'close') mqttValue = 'CLOSE';
       else if (args.mode === 'angle') mqttValue = args.angle != null ? String(args.angle) : '0';
-      else mqttValue = '0';
-      mqttTopic = 'cmnd/classroom_door/POWER';
-      responseText = `Cửa góc ${mqttValue}.`;
+      else mqttValue = 'CLOSE';
+      mqttTopic = 'cmnd/CLASSROOM_02_door/POWER';
+      responseText = `Cửa ${mqttValue}. Thẻ hợp lệ cần thân nhiệt 33 đến 40 độ, cửa tự đóng sau 5 giây.`;
     } else if (toolName === 'set_classroom_mode') {
       mqttValue = args.mode === 'MANUAL' ? 'MANUAL' : 'AUTO';
-      mqttTopic = 'cmnd/classroom_mode/POWER';
-      responseText = `Mode ${mqttValue}.`;
+      mqttService.publish('cmnd/CLASSROOM_02_led_mode/POWER', mqttValue);
+      mqttService.publish('cmnd/CLASSROOM_02_fan_mode/POWER', mqttValue);
+      responseText = `Đèn và quạt chuyển ${mqttValue}.`;
+      return responseText;
     } else if (toolName === 'read_environment') {
       const cache = mqttService.envCache;
-      responseText = `Thông số môi trường: Nhiệt độ ${cache.temp}°C, Độ ẩm ${cache.humi}%, ${cache.light}, Đèn ${cache.led}, Quạt ${cache.fan}, Cửa ${cache.door}, Chế độ ${cache.mode}.`;
+      responseText = `Nhiệt độ ${cache.temp}°C, độ ẩm ${cache.humi}%, ánh sáng ${cache.light}, thân nhiệt ${cache.body}, đèn ${cache.led} (${cache.ledMode}), quạt ${cache.fan} (${cache.fanMode}), cửa ${cache.door}, gas ${cache.gas}, cháy ${cache.fire}.`;
     } else if (toolName === 'control_all_devices') {
-      const wantOn = args.state === 'ON';
-      const state = relayCmd(wantOn);
-      mqttService.publish('cmnd/classroom_led/POWER', state);
-      mqttService.publish('cmnd/classroom_fan/POWER', state);
-      responseText = `Đã ${wantOn ? 'bật' : 'tắt'} toàn bộ thiết bị.`;
+      const state = args.state === 'ON' ? 'ON' : 'OFF';
+      mqttService.publish('cmnd/CLASSROOM_02_led/POWER', state);
+      mqttService.publish('cmnd/CLASSROOM_02_fan/POWER', state);
+      responseText = `Đã ${state === 'ON' ? 'bật' : 'tắt'} đèn và quạt.`;
       return responseText;
     }
 
@@ -264,8 +271,30 @@ class XiaoZhiService {
         }
       },
       {
+        name: "set_light_mode",
+        description: "Chọn AUTO hoặc MANUAL riêng cho đèn. AUTO bật khi ánh sáng digital dưới 40% và tắt khi từ 45%.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            mode: { type: "string", enum: ["AUTO", "MANUAL"] }
+          },
+          required: ["mode"]
+        }
+      },
+      {
+        name: "set_fan_mode",
+        description: "Chọn AUTO hoặc MANUAL riêng cho quạt. AUTO bật khi nhiệt độ trên 30 độ hoặc có gas/CO2, tắt khi từ 29.5 độ trở xuống.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            mode: { type: "string", enum: ["AUTO", "MANUAL"] }
+          },
+          required: ["mode"]
+        }
+      },
+      {
         name: "set_classroom_mode",
-        description: "Cài đặt chế độ hoạt động cho lớp học: AUTO (Tự động bật/tắt thiết bị theo cảm biến) hoặc MANUAL (Điều khiển thủ công).",
+        description: "Đặt cùng lúc đèn và quạt sang AUTO hoặc MANUAL.",
         inputSchema: {
           type: "object",
           properties: {

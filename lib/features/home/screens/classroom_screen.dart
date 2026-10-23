@@ -9,595 +9,345 @@ class ClassroomScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final deviceProvider = Provider.of<DeviceProvider>(context);
-    final studentProvider = Provider.of<StudentProvider>(context);
+    final device = Provider.of<DeviceProvider>(context);
+    final students = Provider.of<StudentProvider>(context);
+    final alarm = device.classroomGas || device.classroomFire;
 
     return Scaffold(
       backgroundColor: const Color(0xFF0F172A),
       appBar: AppBar(
         backgroundColor: const Color(0xFF1E293B),
         elevation: 0,
-        centerTitle: true,
-        title: const Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(Icons.school, color: Colors.cyanAccent),
-            SizedBox(width: 8),
-            Text(
-              'Lớp Học Thông Minh',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Colors.white),
-            ),
-          ],
-        ),
+        title: const Text('Lớp học thông minh', style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           IconButton(
+            tooltip: 'Lịch và lời dẫn',
+            onPressed: () => showDialog(context: context, builder: (_) => const ScheduleManagementDialog()),
             icon: const Icon(Icons.alarm_on, color: Colors.cyanAccent),
-            tooltip: 'Lịch Auto & Lời Dẫn Xiaozhi',
-            onPressed: () {
-              showDialog(
-                context: context,
-                builder: (context) => const ScheduleManagementDialog(),
-              );
-            },
           ),
-          Container(
-            margin: const EdgeInsets.only(right: 16),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            decoration: BoxDecoration(
-              color: (deviceProvider.isMqttConnected && deviceProvider.isClassroomDeviceOnline)
-                  ? Colors.green.withOpacity(0.2)
-                  : Colors.red.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: (deviceProvider.isMqttConnected && deviceProvider.isClassroomDeviceOnline) ? Colors.green : Colors.red,
-                width: 1,
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  Icons.circle,
-                  size: 8,
-                  color: (deviceProvider.isMqttConnected && deviceProvider.isClassroomDeviceOnline) ? Colors.green : Colors.red,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  (deviceProvider.isMqttConnected && deviceProvider.isClassroomDeviceOnline) ? 'ONLINE' : 'OFFLINE',
-                  style: TextStyle(
-                    color: (deviceProvider.isMqttConnected && deviceProvider.isClassroomDeviceOnline) ? Colors.green : Colors.red,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ],
-            ),
-          ),
+          _onlineChip(device.isMqttConnected && device.isClassroomDeviceOnline),
         ],
       ),
       body: RefreshIndicator(
         onRefresh: () async {
-          deviceProvider.requestClassroomStatus();
-          await Future.delayed(const Duration(milliseconds: 600));
+          device.requestClassroomStatus();
+          await Future.delayed(const Duration(milliseconds: 500));
         },
-        child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Cảnh báo khi thiết bị ESP32 Ngoại Tuyến (Rút điện / Mất WiFi / Không nhận dữ liệu)
-              if (!deviceProvider.isClassroomDeviceOnline)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.redAccent),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.wifi_off, color: Colors.redAccent, size: 28),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '🔴 Thiết Bị ESP32 Ngoại Tuyến (OFFLINE)',
-                              style: TextStyle(
-                                color: Colors.redAccent,
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                            SizedBox(height: 2),
-                            Text(
-                              'Mạch ESP32 không gửi dữ liệu (Có thể bị rút điện hoặc mất WiFi). Vui lòng kiểm tra lại thiết bị!',
-                              style: TextStyle(color: Colors.white70, fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              // Thẻ tổng quan điểm danh nhanh
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [Color(0xFF1E3A8A), Color(0xFF0284C7)],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.cyan.withOpacity(0.3),
-                      blurRadius: 10,
-                      offset: const Offset(0, 4),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Sỉ Số Điểm Danh RFID',
-                          style: TextStyle(color: Colors.white70, fontSize: 13),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          '${studentProvider.presentCount} / ${studentProvider.totalCount} Học Sinh',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const Icon(Icons.badge, color: Colors.cyanAccent, size: 42),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 20),
-              const Text(
-                'Môi Trường Lớp Học (ESP32)',
-                style: TextStyle(
-                    color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-
-              // Grid Cảm biến (Nhiệt độ, Độ ẩm, Ánh sáng)
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildSensorCard(
-                      title: 'Nhiệt Độ',
-                      value: '${deviceProvider.classroomTemp.toStringAsFixed(1)}°C',
-                      icon: Icons.thermostat,
-                      color: Colors.orangeAccent,
-                      statusText: 'Cảm biến DHT11',
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildSensorCard(
-                      title: 'Độ Ẩm',
-                      value: '${deviceProvider.classroomHumi.toStringAsFixed(1)}%',
-                      icon: Icons.water_drop,
-                      color: Colors.blueAccent,
-                      statusText: 'Độ ẩm không khí',
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: _buildSensorCard(
-                      title: 'Ánh Sáng',
-                      value: deviceProvider.classroomLightStatus,
-                      icon: Icons.wb_sunny,
-                      color: Colors.amber,
-                      statusText: 'Cảm biến Quang',
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 16),
-
-              // THẺ CÀI ĐẶT LỊCH AUTOMATION & LỜI DẪN XIAOZHI
-              InkWell(
-                onTap: () {
-                  showDialog(
-                    context: context,
-                    builder: (context) => const ScheduleManagementDialog(),
-                  );
-                },
-                borderRadius: BorderRadius.circular(16),
-                child: Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [Color(0xFF0F766E), Color(0xFF0D9488)],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.teal.withOpacity(0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 3),
-                      ),
-                    ],
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.alarm_on, color: Colors.cyanAccent, size: 32),
-                      SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Cài Đặt Lịch Auto & Lời Dẫn Xiaozhi',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 15,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            SizedBox(height: 4),
-                            Text(
-                              'Đặt giờ tự động và tùy chỉnh lời nói của Xiaozhi ESP32 từ xa qua MQTT',
-                              style: TextStyle(color: Colors.white70, fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
-                      Icon(Icons.chevron_right, color: Colors.white70),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // THẺ CHỌN CHẾ ĐỘ VẬN HÀNH (AUTO / MANUAL)
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(
-                    color: deviceProvider.isClassroomAutoMode ? Colors.cyanAccent.withOpacity(0.5) : Colors.orangeAccent.withOpacity(0.5),
-                    width: 1.5,
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          children: [
-                            Icon(
-                              deviceProvider.isClassroomAutoMode ? Icons.smart_toy_rounded : Icons.touch_app_rounded,
-                              color: deviceProvider.isClassroomAutoMode ? Colors.cyanAccent : Colors.orangeAccent,
-                              size: 24,
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              'Chế Độ: ${deviceProvider.classroomMode}',
-                              style: TextStyle(
-                                color: deviceProvider.isClassroomAutoMode ? Colors.cyanAccent : Colors.orangeAccent,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Switch(
-                          value: !deviceProvider.isClassroomAutoMode, // true = MANUAL, false = AUTO
-                          activeColor: Colors.orangeAccent,
-                          inactiveThumbColor: Colors.cyanAccent,
-                          inactiveTrackColor: Colors.cyan.withOpacity(0.3),
-                          onChanged: (_) => deviceProvider.toggleClassroomMode(),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: InkWell(
-                            onTap: () {
-                              if (!deviceProvider.isClassroomAutoMode) deviceProvider.toggleClassroomMode();
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-                              decoration: BoxDecoration(
-                                color: deviceProvider.isClassroomAutoMode ? Colors.cyan.withOpacity(0.2) : Colors.transparent,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: deviceProvider.isClassroomAutoMode ? Colors.cyanAccent : Colors.white10),
-                              ),
-                              child: const Center(
-                                child: Text('🤖 TỰ ĐỘNG (AUTO)', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: InkWell(
-                            onTap: () {
-                              if (deviceProvider.isClassroomAutoMode) deviceProvider.toggleClassroomMode();
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
-                              decoration: BoxDecoration(
-                                color: !deviceProvider.isClassroomAutoMode ? Colors.orange.withOpacity(0.2) : Colors.transparent,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(color: !deviceProvider.isClassroomAutoMode ? Colors.orangeAccent : Colors.white10),
-                              ),
-                              child: const Center(
-                                child: Text('🎮 THỦ CÔNG (MANUAL)', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    Text(
-                      deviceProvider.isClassroomAutoMode
-                          ? '🤖 Đang ở chế độ TỰ ĐỘNG: Quạt & Đèn tự chạy theo cảm biến Nhiệt độ (>= 27°C) & Ánh sáng.'
-                          : '🔓 Đang ở chế độ THỦ CÔNG: Cho phép BẬT/TẮT toàn bộ thiết bị tự do trên App (Dùng khi ra về).',
-                      style: TextStyle(
-                        color: deviceProvider.isClassroomAutoMode ? Colors.cyanAccent.withOpacity(0.8) : Colors.orangeAccent.withOpacity(0.8),
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 24),
-              const Text(
-                'Điều Khiển Thiết Bị Lớp Học',
-                style: TextStyle(
-                    color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 12),
-
-              // Switche Quạt, Đèn & Cửa
-              GridView.count(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                crossAxisCount: 2,
-                childAspectRatio: 1.3,
-                crossAxisSpacing: 12,
-                mainAxisSpacing: 12,
-                children: [
-                  // Quạt Lớp Học
-                  _buildDeviceCard(
-                    title: 'Quạt Lớp Học',
-                    subtitle: deviceProvider.classroomFanState ? 'Trạng thái: BẬT (GPIO4)' : 'Trạng thái: TẮT (GPIO4)',
-                    icon: Icons.air,
-                    isOn: deviceProvider.classroomFanState,
-                    activeColor: Colors.cyanAccent,
-                    onToggle: () => deviceProvider.toggleClassroomFan(),
-                  ),
-                  // Đèn Lớp Học
-                  _buildDeviceCard(
-                    title: 'Đèn Lớp Học',
-                    subtitle: deviceProvider.classroomLedState ? 'Trạng thái: BẬT (GPIO14)' : 'Trạng thái: TẮT (GPIO14)',
-                    icon: Icons.lightbulb,
-                    isOn: deviceProvider.classroomLedState,
-                    activeColor: Colors.amberAccent,
-                    onToggle: () => deviceProvider.toggleClassroomLed(),
-                  ),
-                  // Cửa Sổ / Cửa Lớp Học (Servo GPIO13)
-                  _buildDeviceCard(
-                    title: 'Cửa Sổ / Cửa Lớp',
-                    subtitle: deviceProvider.classroomDoorState ? 'Trạng thái: BẬT (Mở 90°)' : 'Trạng thái: TẮT (Đóng 0°)',
-                    icon: Icons.window,
-                    isOn: deviceProvider.classroomDoorState,
-                    activeColor: Colors.greenAccent,
-                    onToggle: () => deviceProvider.toggleClassroomDoor(),
-                  ),
-                  // RFID Card Reader Status
-                  _buildInfoCard(
-                    title: 'Đầu Đọc RFID',
-                    subtitle: 'Module RC522 (SPI)',
-                    icon: Icons.nfc,
-                    statusText: 'Đang chờ quẹt thẻ...',
-                    color: Colors.purpleAccent,
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSensorCard({
-    required String title,
-    required String value,
-    required IconData icon,
-    required Color color,
-    required String statusText,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: color.withOpacity(0.3)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Icon(icon, color: color, size: 20),
-              Text(
-                title,
-                style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.w500),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              color: color,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            statusText,
-            style: const TextStyle(color: Colors.white38, fontSize: 9),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDeviceCard({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required bool isOn,
-    required Color activeColor,
-    required VoidCallback onToggle,
-  }) {
-    return InkWell(
-      onTap: onToggle,
-      borderRadius: BorderRadius.circular(16),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: isOn ? activeColor.withOpacity(0.15) : const Color(0xFF1E293B),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(
-            color: isOn ? activeColor : Colors.white12,
-            width: isOn ? 1.5 : 1,
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        child: ListView(
+          padding: const EdgeInsets.all(16),
           children: [
+            if (!device.isClassroomDeviceOnline) _banner(
+              color: Colors.redAccent,
+              icon: Icons.wifi_off,
+              title: 'ESP32 đang ngoại tuyến',
+              body: 'Kiểm tra nguồn và WiFi. Portal cấu hình: SmartClassroom_C2 → 192.168.4.1',
+            ),
+            if (alarm) _banner(
+              color: device.classroomFire ? Colors.deepOrange : Colors.amber,
+              icon: device.classroomFire ? Icons.local_fire_department : Icons.cloud,
+              title: device.classroomFire && device.classroomGas
+                  ? 'Cháy và CO2'
+                  : device.classroomFire
+                      ? 'Báo cháy'
+                      : 'Báo CO2 / khí gas',
+              body: 'Còi trên mạch đang kêu. Thông báo này vẫn hiện khi bạn thoát app, miễn là điện thoại có mạng.',
+            ),
+            _summary(students),
+            const SizedBox(height: 16),
+            const _SectionTitle('Môi trường'),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: isOn ? activeColor.withOpacity(0.2) : Colors.white.withOpacity(0.05),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(icon, color: isOn ? activeColor : Colors.white38, size: 22),
+                _sensor('Nhiệt độ', '${device.classroomTemp.toStringAsFixed(1)}°C', Icons.thermostat, Colors.orangeAccent, 'DHT11'),
+                const SizedBox(width: 10),
+                _sensor('Độ ẩm', '${device.classroomHumi.toStringAsFixed(0)}%', Icons.water_drop, Colors.lightBlueAccent, 'DHT11'),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                _sensor(
+                  'Ánh sáng',
+                  '${device.classroomLightPercent}%',
+                  device.classroomLightDark ? Icons.nightlight : Icons.wb_sunny,
+                  Colors.amber,
+                  device.classroomLightStatus,
                 ),
-                Switch(
-                  value: isOn,
-                  onChanged: (_) => onToggle(),
-                  activeColor: activeColor,
+                const SizedBox(width: 10),
+                _sensor(
+                  'Thân nhiệt',
+                  device.classroomBody == null ? '--' : '${device.classroomBody!.toStringAsFixed(1)}°C',
+                  Icons.personal_injury,
+                  Colors.pinkAccent,
+                  'MLX90614',
                 ),
               ],
             ),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(height: 10),
+            Row(
               children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                      color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: TextStyle(
-                    color: isOn ? activeColor : Colors.white38,
-                    fontSize: 11,
-                  ),
-                ),
+                _sensor('CO2 / Gas', device.classroomGas ? 'BÁO' : 'Ổn', Icons.cloud, device.classroomGas ? Colors.redAccent : Colors.greenAccent, 'Digital DO'),
+                const SizedBox(width: 10),
+                _sensor('Cháy', device.classroomFire ? 'BÁO' : 'Ổn', Icons.local_fire_department, device.classroomFire ? Colors.deepOrange : Colors.greenAccent, 'Digital DO'),
               ],
             ),
+            const SizedBox(height: 18),
+            _actuatorCard(
+              icon: Icons.lightbulb,
+              color: Colors.amberAccent,
+              title: 'Đèn chiếu sáng lớp học',
+              auto: device.isLedAuto,
+              isOn: device.classroomLedState,
+              rule: 'Tự động: bật khi ánh sáng < 40%, tắt khi ≥ 45%',
+              reason: device.classroomLedReason,
+              onMode: (auto) => device.setClassroomLedMode(auto),
+              onPower: device.toggleClassroomLed,
+            ),
+            const SizedBox(height: 12),
+            _actuatorCard(
+              icon: Icons.air,
+              color: Colors.cyanAccent,
+              title: 'Quạt thông gió và làm mát',
+              auto: device.isFanAuto,
+              isOn: device.classroomFanState,
+              rule: 'Tự động: bật khi nhiệt độ > 30°C hoặc có khói/gas, tắt khi ≤ 29.5°C',
+              reason: device.classroomFanReason,
+              onMode: (auto) => device.setClassroomFanMode(auto),
+              onPower: device.toggleClassroomFan,
+            ),
+            const SizedBox(height: 12),
+            _doorCard(device),
+            const SizedBox(height: 12),
+            _scheduleTile(context),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildInfoCard({
-    required String title,
-    required String subtitle,
-    required IconData icon,
-    required String statusText,
-    required Color color,
-  }) {
+  Widget _onlineChip(bool online) {
+    final color = online ? Colors.greenAccent : Colors.redAccent;
     return Container(
-      padding: const EdgeInsets.all(14),
+      margin: const EdgeInsets.only(right: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: color),
+      ),
+      child: Text(online ? 'ONLINE' : 'OFFLINE', style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  final String text;
+  const _SectionTitle(this.text);
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+    );
+  }
+}
+
+Widget _banner({required Color color, required IconData icon, required String title, required String body}) {
+  return Container(
+    margin: const EdgeInsets.only(bottom: 12),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: color.withValues(alpha: 0.15),
+      borderRadius: BorderRadius.circular(14),
+      border: Border.all(color: color),
+    ),
+    child: Row(
+      children: [
+        Icon(icon, color: color, size: 28),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(title, style: TextStyle(color: color, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 2),
+              Text(body, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _summary(StudentProvider students) {
+  return Container(
+    width: double.infinity,
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      gradient: const LinearGradient(colors: [Color(0xFF1E3A8A), Color(0xFF0284C7)]),
+      borderRadius: BorderRadius.circular(16),
+    ),
+    child: Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Điểm danh RFID', style: TextStyle(color: Colors.white70)),
+              const SizedBox(height: 4),
+              Text(
+                '${students.presentCount} / ${students.totalCount} học sinh',
+                style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        ),
+        const Icon(Icons.badge, color: Colors.cyanAccent, size: 40),
+      ],
+    ),
+  );
+}
+
+Widget _sensor(String title, String value, IconData icon, Color color, String note) {
+  return Expanded(
+    child: Container(
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: const Color(0xFF1E293B),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: color.withOpacity(0.3)),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: color.withValues(alpha: 0.35)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(icon, color: color, size: 22),
-              ),
-              Icon(Icons.wifi, color: color, size: 16),
-            ],
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                    color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                subtitle,
-                style: const TextStyle(color: Colors.white38, fontSize: 11),
-              ),
-            ],
-          ),
+          Icon(icon, color: color, size: 20),
+          const SizedBox(height: 8),
+          Text(value, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.bold)),
+          Text(title, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+          Text(note, style: const TextStyle(color: Colors.white38, fontSize: 10)),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
+
+Widget _actuatorCard({
+  required IconData icon,
+  required Color color,
+  required String title,
+  required bool auto,
+  required bool isOn,
+  required String rule,
+  required String reason,
+  required ValueChanged<bool> onMode,
+  required VoidCallback onPower,
+}) {
+  return Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: const Color(0xFF1E293B),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: isOn ? color : Colors.white12),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(icon, color: color),
+            const SizedBox(width: 8),
+            Expanded(child: Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+            Text(isOn ? 'BẬT' : 'TẮT', style: TextStyle(color: isOn ? color : Colors.white38, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(rule, style: const TextStyle(color: Colors.white60, fontSize: 12)),
+        const SizedBox(height: 6),
+        Text(reason, style: TextStyle(color: color, fontSize: 13)),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(child: _modeButton('Tự động', auto, color, () => onMode(true))),
+            const SizedBox(width: 8),
+            Expanded(child: _modeButton('Thủ công', !auto, Colors.orangeAccent, () => onMode(false))),
+            const SizedBox(width: 8),
+            Switch(value: isOn, activeThumbColor: color, onChanged: (_) => onPower()),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _modeButton(String label, bool selected, Color color, VoidCallback onTap) {
+  return InkWell(
+    onTap: onTap,
+    borderRadius: BorderRadius.circular(10),
+    child: Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: selected ? color.withValues(alpha: 0.2) : Colors.transparent,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: selected ? color : Colors.white12),
+      ),
+      child: Text(label, style: TextStyle(color: selected ? color : Colors.white70, fontWeight: FontWeight.bold, fontSize: 12)),
+    ),
+  );
+}
+
+Widget _doorCard(DeviceProvider device) {
+  final open = device.classroomDoorState;
+  final body = device.classroomBody;
+  final bodyText = body == null ? 'chưa đọc' : '${body.toStringAsFixed(1)}°C';
+  return Container(
+    padding: const EdgeInsets.all(14),
+    decoration: BoxDecoration(
+      color: const Color(0xFF1E293B),
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(color: open ? Colors.greenAccent : Colors.white12),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Icon(Icons.door_front_door, color: Colors.greenAccent),
+            const SizedBox(width: 8),
+            const Expanded(child: Text('Cửa tự động lớp học', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+            Text(open ? 'MỞ ${device.classroomDoorAngle.toStringAsFixed(0)}°' : 'ĐÓNG', style: const TextStyle(color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Servo SG90. Tự động mở khi học sinh quẹt thẻ hợp lệ và thân nhiệt 33°C – 40°C, rồi đóng sau 5 giây.',
+          style: TextStyle(color: Colors.white60, fontSize: 12),
+        ),
+        const SizedBox(height: 6),
+        Text('Thân nhiệt gần nhất: $bodyText', style: const TextStyle(color: Colors.white, fontSize: 13)),
+        if (device.classroomLastUid.isNotEmpty)
+          Text('Thẻ ${device.classroomLastUid} · ${device.classroomRfidResult.isEmpty ? 'đã quẹt' : device.classroomRfidResult}',
+              style: const TextStyle(color: Colors.white54, fontSize: 12)),
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: device.toggleClassroomDoor,
+            child: Text(open ? 'Đóng cửa' : 'Mở cửa'),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _scheduleTile(BuildContext context) {
+  return ListTile(
+    tileColor: const Color(0xFF134E4A),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    leading: const Icon(Icons.record_voice_over, color: Colors.cyanAccent),
+    title: const Text('Lịch và lời dẫn Xiaozhi', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+    subtitle: const Text('Giọng nói theo giờ học', style: TextStyle(color: Colors.white70)),
+    trailing: const Icon(Icons.chevron_right, color: Colors.white70),
+    onTap: () => showDialog(context: context, builder: (_) => const ScheduleManagementDialog()),
+  );
 }

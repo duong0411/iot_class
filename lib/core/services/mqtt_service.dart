@@ -104,9 +104,7 @@ class MqttService extends ChangeNotifier {
 
   // Helper yêu cầu ESP32 phản hồi ngay trạng thái mới nhất
   void requestClassroomStatus() {
-    publish('cmnd/CLASSROOM_01/status', 'STATE', qos: MqttQos.atMostOnce);
-    publish('cmnd/classroom_status/get', '{}', qos: MqttQos.atMostOnce);
-    publish('cmnd/classroom_mode/get', '{}', qos: MqttQos.atMostOnce);
+    publish('cmnd/CLASSROOM_02/status', 'STATE', qos: MqttQos.atMostOnce);
     publishScheduleGet();
   }
 
@@ -119,18 +117,21 @@ class MqttService extends ChangeNotifier {
 
     final topics = <String>{
       'tele/+/status',
-      'tele/CLASSROOM_01/status',
-      'tele/classroom_temp/status',
-      'tele/classroom_humi/status',
-      'tele/classroom_light/status',
-      'tele/classroom_led/status',
-      'tele/classroom_fan/status',
-      'tele/classroom_door/status',
-      'tele/classroom_rfid/status',
-      'tele/classroom_mode/status',
+      'tele/CLASSROOM_02/status',
+      'tele/CLASSROOM_02_temp/status',
+      'tele/CLASSROOM_02_humi/status',
+      'tele/CLASSROOM_02_light/status',
+      'tele/CLASSROOM_02_led/status',
+      'tele/CLASSROOM_02_fan/status',
+      'tele/CLASSROOM_02_led_mode/status',
+      'tele/CLASSROOM_02_fan_mode/status',
+      'tele/CLASSROOM_02_door/status',
+      'tele/CLASSROOM_02_rfid/status',
+      'tele/CLASSROOM_02_body/status',
+      'tele/CLASSROOM_02_gas/status',
+      'tele/CLASSROOM_02_fire/status',
+      'tele/CLASSROOM_02_alarm/status',
       'stat/classroom_schedule/list',
-      'stat/CLASSROOM_01/+',
-      'stat/classroom/+',
     };
 
     for (var node in nodes) {

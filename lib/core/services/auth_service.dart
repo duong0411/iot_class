@@ -1,27 +1,39 @@
 import 'dart:convert';
+import 'dart:io';
+import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user_model.dart';
 
 /// Local-only auth — users stored on device via SharedPreferences.
 class AuthService {
-  static const _usersKey = 'local_users';
   static const _sessionTokenKey = 'auth_token';
   static const _sessionUserKey = 'user_data';
+
+  /// Docker classroom-backend. Máy Android giả lập dùng 10.0.2.2, iOS giả lập dùng 127.0.0.1.
+  static String get apiRoot {
+    if (kIsWeb) return 'http://127.0.0.1:3001/api';
+    if (Platform.isAndroid) return 'http://10.0.2.2:3001/api';
+    return 'http://127.0.0.1:3001/api';
+  }
 
   String? _token;
   String? get token => _token;
 
-  Future<List<Map<String, dynamic>>> _loadUsers() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_usersKey);
-    if (raw == null || raw.isEmpty) return [];
-    final list = jsonDecode(raw) as List<dynamic>;
-    return list.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-  }
-
-  Future<void> _saveUsers(List<Map<String, dynamic>> users) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_usersKey, jsonEncode(users));
+  Future<Map<String, dynamic>> _post(String path, Map<String, dynamic> body) async {
+    final response = await http
+        .post(
+          Uri.parse('$apiRoot$path'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 12));
+    final decoded = jsonDecode(response.body);
+    final map = decoded is Map<String, dynamic> ? decoded : <String, dynamic>{};
+    if (response.statusCode >= 400 || map['success'] == false) {
+      throw Exception(map['message']?.toString() ?? 'Yêu cầu thất bại');
+    }
+    return map;
   }
 
   Future<void> _saveSession(String token, Map<String, dynamic> userJson) async {
@@ -29,17 +41,6 @@ class AuthService {
     await prefs.setString(_sessionTokenKey, token);
     await prefs.setString(_sessionUserKey, jsonEncode(userJson));
     _token = token;
-  }
-
-  Map<String, dynamic> _publicUser(Map<String, dynamic> stored) {
-    return {
-      'id': stored['id'],
-      'name': stored['name'],
-      'email': stored['email'],
-      'phone': stored['phone'] ?? '',
-      'avatar': stored['avatar'],
-      'createdAt': stored['createdAt'],
-    };
   }
 
   Future<void> logout() async {
@@ -61,24 +62,16 @@ class AuthService {
   }
 
   Future<UserModel?> login(String email, String password) async {
-    final users = await _loadUsers();
-    final emailNorm = email.trim().toLowerCase();
-
-    Map<String, dynamic>? match;
-    for (final u in users) {
-      if ((u['email'] as String).toLowerCase() == emailNorm &&
-          u['password'] == password) {
-        match = u;
-        break;
-      }
-    }
-
-    if (match == null) return null;
-
-    final public = _publicUser(match);
-    final token = 'local_${match['id']}';
-    await _saveSession(token, public);
-    return UserModel.fromJson(public);
+    final map = await _post('/auth/login', {
+      'email': email.trim(),
+      'password': password,
+    });
+    final data = map['data'] as Map<String, dynamic>? ?? {};
+    final token = data['token']?.toString() ?? '';
+    final user = Map<String, dynamic>.from(data['user'] as Map? ?? {});
+    if (token.isEmpty) return null;
+    await _saveSession(token, user);
+    return UserModel.fromJson(user);
   }
 
   Future<void> register({
@@ -87,51 +80,25 @@ class AuthService {
     required String phone,
     required String password,
   }) async {
-    final users = await _loadUsers();
-    final emailNorm = email.trim().toLowerCase();
-    final phoneNorm = phone.trim();
-
-    if (users.any((u) => (u['email'] as String).toLowerCase() == emailNorm)) {
-      throw Exception('Email đã được sử dụng');
-    }
-    if (users.any((u) => (u['phone'] as String) == phoneNorm)) {
-      throw Exception('Số điện thoại đã được sử dụng');
-    }
-
-    final now = DateTime.now();
-    final user = {
-      'id': now.millisecondsSinceEpoch.toString(),
+    await _post('/auth/register', {
       'name': name.trim(),
-      'email': emailNorm,
-      'phone': phoneNorm,
+      'email': email.trim(),
+      'phone': phone.trim(),
       'password': password,
-      'avatar': null,
-      'createdAt': now.toIso8601String(),
-    };
-    users.add(user);
-    await _saveUsers(users);
+    });
   }
 
   Future<void> checkPhoneExists(String phone) async {
-    final users = await _loadUsers();
-    final phoneNorm = phone.trim();
-    final exists = users.any((u) => (u['phone'] as String) == phoneNorm);
-    if (!exists) {
-      throw Exception('Số điện thoại không tồn tại');
-    }
+    await _post('/auth/check-phone-exists', {'phone': phone.trim()});
   }
 
   Future<void> resetPassword({
     required String phone,
     required String newPassword,
   }) async {
-    final users = await _loadUsers();
-    final phoneNorm = phone.trim();
-    final index = users.indexWhere((u) => (u['phone'] as String) == phoneNorm);
-    if (index < 0) {
-      throw Exception('Không tìm thấy tài khoản');
-    }
-    users[index]['password'] = newPassword;
-    await _saveUsers(users);
+    await _post('/auth/reset-password', {
+      'phone': phone.trim(),
+      'newPassword': newPassword,
+    });
   }
 }

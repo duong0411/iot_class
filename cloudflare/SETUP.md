@@ -1,156 +1,98 @@
-# 🌐 Hướng dẫn Setup Cloudflare — AloT MQTT + Backend API
+# Cloudflare — 1 domain + path (nhà giữ nguyên, lớp học path riêng)
 
-## Sơ đồ luồng dữ liệu
+## Sơ đồ
 
 ```
-                    ┌─────────────────────────────────────────────┐
-                    │           CLOUDFLARE (lo TLS/SSL)           │
-ESP32               │                                             │
-wsClient.beginSSL() │  WSS:443        ┌─────────────────────┐     │
-mqtt.duynguyen.io.vn│──────────────►  │  Cloudflare Proxy   │     │
-port 443 /mqtt      │                 │  (decrypt TLS)      │     │
-                    │                 └──────────┬──────────┘     │
-Mobile App          │                            │ plain WS        │
-(MQTT over WSS)     │                            ▼                 │
-                    │                 ┌──────────────────────┐     │
-                    │                 │  Cloudflare Tunnel   │     │
-                    │                 │  → localhost:443     │     │
-                    │                 └──────────┬───────────┘     │
-                    └────────────────────────────┼─────────────────┘
-                                                 │ plain ws://
-                                                 ▼
-                                    ┌────────────────────────┐
-                                    │  Mosquitto Broker      │
-                                    │  port 443 (WebSocket)  │
-                                    │  port 1883 (TCP)       │
-                                    └────────────┬───────────┘
-                                                 │ mqtt://localhost:1883
-                                                 ▼
-                                    ┌────────────────────────┐
-                                    │  Backend Node.js       │
-                                    │  (nội bộ, không TLS)   │
-                                    └────────────────────────┘
+Internet :443
+  │
+  ├─ mqtt.duynguyen.io.vn/mqtt  →  Mosquitto (host :443 WS / :1883 TCP)
+  │
+  └─ duynguyen.io.vn
+        ├─ /api/schedule*  ─┐
+        ├─ /api/tts*       ─┼→  classroom-backend :3001  (Docker lớp học + Opus /ws)
+        ├─ /audio*         ─┤
+        ├─ /ws*            ─┘
+        └─ /* (còn lại)    →  alot-backend :3000         (Docker nhà — KHÔNG SỬA)
 ```
 
-> **Kết quả:** ESP32 gửi `beginSSL` lên `mqtt.duynguyen.io.vn:443`.
+App Flutter lớp học đã gọi đúng các path trên → **không cần rebuild app**.
 
 ---
 
-## Bước 1: Cài cloudflared
+## Bước 1–3: cloudflared / login / tạo tunnel
 
-### Windows
-```powershell
-winget install --id Cloudflare.cloudflared
-```
-
-### Linux/VPS (Ubuntu/Debian)
-```bash
-curl -L --output cloudflared.deb \
-  https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64.deb
-sudo dpkg -i cloudflared.deb
-```
+Giữ như trước (`alot-mqtt-tunnel`).
 
 ---
 
-## Bước 2: Đăng nhập Cloudflare
-
-```bash
-cloudflared tunnel login
-# → Mở trình duyệt, chọn duynguyen.io.vn → Authorize
-```
-
----
-
-## Bước 3: Tạo Tunnel
-
-```bash
-cloudflared tunnel create alot-mqtt-tunnel
-# Lưu lại Tunnel ID xuất hiện!
-```
-
----
-
-## Bước 4: File cấu hình Tunnel
-
-Tạo `~/.cloudflared/config.yml` (Linux) hoặc `%USERPROFILE%\.cloudflared\config.yml` (Windows):
+## Bước 4: `%USERPROFILE%\.cloudflared\config.yml`
 
 ```yaml
 tunnel: alot-mqtt-tunnel
 credentials-file: C:\Users\<username>\.cloudflared\<TUNNEL_ID>.json
 
 ingress:
-  # MQTT WebSocket — Cloudflare nhận WSS từ ESP32, forward plain WS về Mosquitto
+  # MQTT WSS (ESP32 + app) — dùng chung nhà & lớp
   - hostname: mqtt.duynguyen.io.vn
     service: ws://localhost:443
 
-  # Backend API + Opus WebSocket (tuỳ chọn)
-  - hostname: api.duynguyen.io.vn
+  # Lớp học — classroom-backend :3001 (đặt TRƯỚC rule nhà)
+  - hostname: duynguyen.io.vn
+    path: /api/schedule*
+    service: http://localhost:3001
+  - hostname: duynguyen.io.vn
+    path: /api/tts*
+    service: http://localhost:3001
+  - hostname: duynguyen.io.vn
+    path: /audio*
+    service: http://localhost:3001
+  - hostname: duynguyen.io.vn
+    path: /ws*
     service: http://localhost:3001
 
-  # Catch-all bắt buộc
+  # Nhà thông minh — alot-backend :3000 (giữ nguyên)
+  - hostname: duynguyen.io.vn
+    service: http://localhost:3000
+
   - service: http_status:404
 ```
 
----
+Restart tunnel sau khi sửa:
 
-## Bước 5: Thêm DNS CNAME trong Cloudflare Dashboard
-
-```bash
-cloudflared tunnel route dns alot-mqtt-tunnel mqtt.duynguyen.io.vn
-cloudflared tunnel route dns alot-mqtt-tunnel api.duynguyen.io.vn
+```powershell
+cloudflared tunnel run alot-mqtt-tunnel
+# hoặc restart Windows service cloudflared
 ```
 
-Hoặc thêm thủ công trong **Cloudflare Dashboard → DNS**:
+---
+
+## Bước 5: DNS
+
 | Type | Name | Target | Proxy |
 |------|------|--------|-------|
-| CNAME | `mqtt` | `<TUNNEL_ID>.cfargotunnel.com` | 🟠 Proxied |
-| CNAME | `api` | `<TUNNEL_ID>.cfargotunnel.com` | 🟠 Proxied |
+| CNAME | `mqtt` | `<TUNNEL_ID>.cfargotunnel.com` | Proxied |
+| CNAME | `@` | `<TUNNEL_ID>.cfargotunnel.com` | Proxied |
+
+**Network → WebSockets → ON**
 
 ---
 
-## Bước 6: Bật WebSockets trong Cloudflare
-
-**Cloudflare Dashboard → duynguyen.io.vn → Network → WebSockets → ON** ✅
-
----
-
-## Bước 7: Chạy Tunnel
+## Kiểm tra
 
 ```bash
-# Test thử
-cloudflared tunnel run alot-mqtt-tunnel
+# Nhà (không đổi)
+curl -I https://duynguyen.io.vn/api/auth/profile
 
-# Cài service vĩnh viễn (Windows)
-cloudflared service install
-cloudflared service start
+# Lớp học
+curl https://duynguyen.io.vn/api/schedule
+curl -I https://duynguyen.io.vn/audio/
 
-# Cài service vĩnh viễn (Linux)
-sudo cloudflared service install
-sudo systemctl enable --now cloudflared
-```
-
----
-
-## ✅ Kiểm tra kết nối
-
-```bash
-# Test MQTT từ máy tính (dùng MQTTX hoặc mqtt-cli)
-# Kết nối WSS (y hệt ESP32):
+# MQTT
 mqttx sub -h mqtt.duynguyen.io.vn -p 443 -t "tele/#" --protocol wss --path /mqtt
-
-# Test backend API
-curl https://api.duynguyen.io.vn/
 ```
 
 ---
 
-## So sánh: Cũ vs Mới
+## Docker lớp học
 
-| | **Tên miền cũ** | **mqtt.duynguyen.io.vn** |
-|---|---|---|
-| ESP32 code | `beginSSL(host, 443, "/mqtt")` | `beginSSL(host, 443, "/mqtt")` ✅ |
-| Protocol ESP32→Cloud | WSS (port 443) | WSS (port 443) ✅ |
-| TLS xử lý bởi | Broker bên ngoài | Cloudflare ✅ |
-| Mosquitto nhận | — | plain WS localhost:443 |
-| Backend kết nối | WSS qua internet | TCP localhost:1883 ⚡ |
-| MQTT topics | Giống hệt | Giống hệt ✅ |
+Xem `DOCKER.md` — chỉ chạy `classroom-backend` port 3001, không đụng `alot-backend`.
