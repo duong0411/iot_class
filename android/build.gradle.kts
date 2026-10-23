@@ -16,11 +16,11 @@ subprojects {
     project.layout.buildDirectory.value(newSubprojectBuildDir)
 }
 
+apply(from = "force_compile_sdk.gradle")
+
 subprojects {
     project.evaluationDependsOn(":app")
 }
-
-apply(from = "force_compile_sdk.gradle")
 
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)

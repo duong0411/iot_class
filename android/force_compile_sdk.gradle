@@ -1,16 +1,14 @@
-// Force compileSdk 36 for every Android library plugin (file_picker ships with 34).
+// Some Flutter plugins (file_picker, background service) still ship compileSdk 34.
+// Newer Flutter Android libraries require 36, so raise every plugin after its own
+// android {} block has run. withPlugin alone is too early and gets overwritten.
 subprojects { sub ->
+    def raise = { ext ->
+        ext.compileSdk = 36
+    }
     sub.pluginManager.withPlugin("com.android.library") {
-        sub.android {
-            if (compileSdkVersion != null && compileSdkVersion < 36) {
-                // older AGP
-            }
-            compileSdkVersion 36
-        }
+        sub.androidComponents.finalizeDsl(raise)
     }
     sub.pluginManager.withPlugin("com.android.application") {
-        sub.android {
-            compileSdkVersion 36
-        }
+        sub.androidComponents.finalizeDsl(raise)
     }
 }
